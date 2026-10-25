@@ -2257,7 +2257,16 @@ def open_window(url):
     try:
         sys.path.insert(0, str(HERE))
         import window
-    except ImportError:
+    except ImportError as e:
+        if FROZEN:  # the packaged app has no window.py file to hand to another Python: say why, and use the browser
+            msg = f"TubeView's window couldn't load ({e}). A missing system library is the usual cause."
+            print(msg)
+            try:
+                CONF_DIR.mkdir(parents=True, exist_ok=True)
+                (CONF_DIR / "window-error.log").write_text(msg + "\n")
+            except OSError:
+                pass
+            return 1
         return subprocess.run([shutil.which("python3", path="/usr/bin:/usr/local/bin") or "python3", str(HERE / "window.py"), url]).returncode
     return window.main(url)
 
