@@ -16,6 +16,14 @@ HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 # packaged builds carry their own ffmpeg and deno (yt-dlp's JavaScript runtime) in bin/
 if (HERE / "bin").is_dir():
     os.environ["PATH"] = str(HERE / "bin") + os.pathsep + os.environ.get("PATH", "")
+# the packaged app's OpenSSL looks for certificates where the build machine (Ubuntu) keeps them, which other
+# distros don't, so every HTTPS request failed there; use the certificate list it carries instead
+if FROZEN and not os.environ.get("SSL_CERT_FILE"):
+    try:
+        import certifi
+        os.environ["SSL_CERT_FILE"] = certifi.where()
+    except ImportError:
+        pass
 PORT = 8765
 HOSTS = (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
 # The Android app runs this same server inside the app and points these at its own folders
