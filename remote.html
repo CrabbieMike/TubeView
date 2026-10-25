@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0f">
+<title>TubeView Remote</title>
+<style>
+:root { --bg: #0b0b0f; --surface: #16161d; --surface-2: #20202a; --text: #f4f4f7; --muted: #9a9aab; --accent: #e8e8ff; }
+* { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+body { background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, sans-serif; min-height: 100vh; padding-bottom: env(safe-area-inset-bottom); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input { font: inherit; }
+[hidden] { display: none !important; }
+.wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 28px; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.logo { font-weight: 800; font-size: 20px; } .logo span { color: var(--muted); font-weight: 500; }
+.pc { color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+.tabs button { padding: 8px 16px; border-radius: 999px; color: var(--muted); font-weight: 700; }
+.tabs button.on { background: rgba(255,255,255,.1); color: var(--text); }
+.card { background: var(--surface); border-radius: 20px; padding: 20px; }
+.art { width: 100%; aspect-ratio: 1; border-radius: 16px; object-fit: cover; background: var(--surface-2); display: block; margin-bottom: 18px; }
+.t { font-size: 22px; font-weight: 800; line-height: 1.2; } .a { color: var(--muted); margin-top: 4px; }
+.seek { margin-top: 18px; } .seek input, .vol input { width: 100%; accent-color: var(--accent); }
+.times { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ctl { display: flex; justify-content: space-around; align-items: center; margin: 14px 0 8px; }
+.ctl button { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; }
+.ctl button.big { width: 72px; height: 72px; background: var(--accent); color: #000; font-size: 28px; }
+.ctl button.on { color: var(--accent); background: rgba(255,255,255,.08); }
+.vol { display: flex; align-items: center; gap: 10px; color: var(--muted); margin-top: 6px; }
+.empty { color: var(--muted); text-align: center; padding: 40px 10px; }
+.row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 8px; border-radius: 12px; width: 100%; text-align: left; }
+.row:active { background: var(--surface); }
+.row img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: var(--surface-2); }
+.row b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.row .add { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); font-size: 20px; }
+.search { display: flex; gap: 8px; margin-bottom: 12px; }
+.kinds { display: flex; gap: 6px; margin-bottom: 12px; }
+.kinds button { padding: 6px 14px; border-radius: 999px; color: var(--muted); font-weight: 700; font-size: 14px; background: var(--surface); }
+.kinds button.on { background: var(--accent); color: #000; }
+.row.vid { grid-template-columns: 96px 1fr auto; } .row.vid img { width: 96px; height: 54px; }
+.search input { flex: 1; background: var(--surface); border: 0; border-radius: 999px; color: var(--text); padding: 12px 18px; outline: none; }
+.btn { background: var(--accent); color: #000; font-weight: 800; border-radius: 999px; padding: 12px 22px; }
+.pair { text-align: center; padding-top: 12vh; display: grid; gap: 16px; }
+.pair input { text-align: center; font-size: 34px; letter-spacing: 10px; font-weight: 800; background: var(--surface); color: var(--text);
+  border: 0; border-radius: 16px; padding: 14px; width: 100%; outline: none; }
+.err { color: #ff8a8a; min-height: 1.4em; }
+.toast { position: fixed; left: 50%; bottom: 24px; translate: -50%; background: var(--surface-2); padding: 10px 18px; border-radius: 999px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo">Tube<span>View</span> Remote</div><div class="pc" id="pc"></div></header>
+
+  <form class="pair" id="pair" hidden>
+    <h1 style="font-size:24px">Pair with TubeView</h1>
+    <p style="color:var(--muted)">On your TV or computer, open TubeView → Settings → Phone remote and enter the code shown there.</p>
+    <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Pairing code">
+    <button class="btn">Pair</button>
+    <p class="err" id="perr"></p>
+  </form>
+
+  <div id="main" hidden>
+    <div class="tabs" id="tabs"><button data-t="now" class="on">Now playing</button><button data-t="next">Up next</button><button data-t="find">Search</button></div>
+    <section id="now"></section>
+    <section id="next" hidden></section>
+    <section id="find" hidden>
+      <div class="kinds" id="kinds"><button data-k="videos" class="on">Videos</button><button data-k="songs">Songs</button></div>
+      <form class="search" id="sform"><input id="q" placeholder="Search videos" aria-label="Search" enterkeyhint="search"></form>
+      <div id="results"></div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const art = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`; };
+const KEY = "tubeview-remote-token";  // per PC: localStorage is per address
+let token = localStorage.getItem(KEY), state = {}, dragging = false, kind = "videos";
+const where = () => state.name || "TubeView";
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2000); }
+const api = (path, body) => fetch(path, { method: body ? "POST" : "GET", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+  body: body && JSON.stringify(body) });
+const cmd = (action, extra = {}) => api("/api/cmd", { action, ...extra }).then(r => { if (r.status === 401) unpair(); });
+
+function unpair() { token = null; localStorage.removeItem(KEY); $("#main").hidden = true; $("#pair").hidden = false; }
+
+$("#pair").onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch("/api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: $("#code").value.trim() }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return $("#perr").textContent = j.error || "Couldn't pair.";
+  token = j.token; localStorage.setItem(KEY, token);
+  $("#pair").hidden = true; $("#main").hidden = false; poll();
+};
+
+$("#tabs").onclick = e => {
+  const t = e.target.dataset.t; if (!t) return;
+  $("#tabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  for (const id of ["now", "next", "find"]) $("#" + id).hidden = id !== t;
+  if (t === "find") $("#q").focus();
+};
+
+function renderNow() {
+  const v = state.video, m = v ? null : state.music, el = $("#now");
+  if (m) {
+    const s = m.song;
+    if (el.dataset.mode !== "music") {
+      el.dataset.mode = "music";
+      el.innerHTML = `<div class="card"><img class="art" id="art" alt=""><div class="t" id="tt"></div><div class="a" id="ta"></div>
+        <div class="seek"><input type="range" id="seek" min="0" step="1" aria-label="Position"><div class="times"><span id="t1"></span><span id="t2"></span></div></div>
+        <div class="ctl"><button id="b-sh" aria-label="Shuffle">⤮</button><button id="b-prev" aria-label="Previous">⏮</button>
+          <button class="big" id="b-play" aria-label="Play or pause"></button><button id="b-next" aria-label="Next">⏭</button><button id="b-rep" aria-label="Repeat">↻</button></div>
+        <div class="vol">🔈<input type="range" id="vol" min="0" max="1" step="0.01" aria-label="Volume">🔊</div>
+        <div style="text-align:center;margin-top:10px"><button class="pc" id="b-stop">Stop music</button></div></div>`;
+      $("#b-sh").onclick = () => cmd("shuffle"); $("#b-prev").onclick = () => cmd("prev"); $("#b-next").onclick = () => cmd("next");
+      $("#b-play").onclick = () => { state.music.playing = !state.music.playing; renderNow(); cmd("toggle"); };
+      $("#b-rep").onclick = () => cmd("repeat"); $("#b-stop").onclick = () => cmd("stop");
+      const seek = $("#seek");
+      seek.oninput = () => { dragging = true; $("#t1").textContent = fmt(seek.value); };
+      seek.onchange = () => { dragging = false; cmd("seek", { t: +seek.value }); };
+      $("#vol").onchange = e => cmd("volume", { v: +e.target.value });
+    }
+    if ($("#art").dataset.id !== s.id) { $("#art").src = art(s.id); $("#art").dataset.id = s.id; }
+    $("#tt").textContent = s.title; $("#ta").textContent = s.artist || "";
+    if (!dragging) { $("#seek").max = Math.max(1, m.d); $("#seek").value = m.t; $("#t1").textContent = fmt(m.t); }
+    $("#t2").textContent = fmt(m.d);
+    $("#b-play").textContent = m.playing ? "❚❚" : "▶";
+    $("#b-sh").classList.toggle("on", m.shuffle);
+    $("#b-rep").classList.toggle("on", m.repeat !== "off");
+    $("#b-rep").textContent = m.repeat === "one" ? "↻¹" : "↻";
+    if (document.activeElement !== $("#vol")) $("#vol").value = m.volume;
+  } else if (v) {
+    if (el.dataset.mode !== "video") {
+      el.dataset.mode = "video";
+      el.innerHTML = `<div class="card"><img class="art" id="art" alt="" style="aspect-ratio:16/9"><div class="t" id="tt"></div><div class="a" id="ta"></div>
+        <div class="seek" id="vseek"><input type="range" id="seek" min="0" step="1" aria-label="Position"><div class="times"><span id="t1"></span><span id="t2"></span></div></div>
+        <div class="ctl"><button id="b-prev" aria-label="Start over">⏮</button><button id="b-back" aria-label="Back 10 seconds">-10</button>
+          <button class="big" id="b-play" aria-label="Play or pause"></button><button id="b-fwd" aria-label="Forward 10 seconds">+10</button>
+          <button id="b-next" aria-label="Next video">⏭</button></div>
+        <div style="text-align:center;margin-top:10px"><button class="pc" id="b-close">Close video</button></div></div>`;
+      $("#b-play").onclick = () => { state.video.playing = !state.video.playing; renderNow(); cmd("video_toggle"); };
+      $("#b-close").onclick = () => cmd("video_close");
+      $("#b-back").onclick = () => cmd("video_skip", { t: -10 }); $("#b-fwd").onclick = () => cmd("video_skip", { t: 10 });
+      $("#b-prev").onclick = () => cmd("video_prev"); $("#b-next").onclick = () => cmd("video_next");
+      const seek = $("#seek");
+      seek.oninput = () => { dragging = true; $("#t1").textContent = fmt(seek.value); };
+      seek.onchange = () => { dragging = false; cmd("video_seek", { t: +seek.value }); };
+    }
+    if ($("#art").dataset.id !== v.id) { $("#art").src = `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`; $("#art").dataset.id = v.id; }
+    $("#tt").textContent = v.title; $("#ta").textContent = v.channel || "";
+    $("#vseek").hidden = v.live;
+    if (!dragging) { $("#seek").max = Math.max(1, v.d); $("#seek").value = v.t; $("#t1").textContent = fmt(v.t); }
+    $("#t2").textContent = fmt(v.d);
+    $("#b-play").textContent = v.playing ? "❚❚" : "▶";
+  } else if (el.dataset.mode !== "none") {
+    el.dataset.mode = "none";
+    el.innerHTML = `<div class="empty">Nothing is playing on ${esc(where())}.<br><br><button class="btn" id="go-find">Find something to play</button></div>`;
+    $("#go-find").onclick = () => $('#tabs [data-t="find"]').click();
+  }
+}
+
+function songRow(s, onTap, onAdd) {
+  const b = document.createElement("div");
+  b.className = "row";
+  b.innerHTML = `<img loading="lazy" src="${art(s.id)}" alt=""><div style="min-width:0"><b>${esc(s.title)}</b><span>${esc(s.artist || "")}</span></div>`;
+  b.onclick = onTap;
+  if (onAdd) {
+    const add = Object.assign(document.createElement("button"), { className: "add", textContent: "+", ariaLabel: "Add to queue" });
+    add.onclick = e => { e.stopPropagation(); onAdd(); };
+    b.append(add);
+  }
+  return b;
+}
+
+function videoRow(v, onTap) {
+  const b = document.createElement("div");
+  b.className = "row vid";
+  b.innerHTML = `<img loading="lazy" src="${art(v.id)}" alt=""><div style="min-width:0"><b>${esc(v.title)}</b><span>${esc(v.channel || "")}${v.duration ? " · " + fmt(v.duration) : ""}</span></div>`;
+  b.onclick = onTap;
+  return b;
+}
+
+$("#kinds").onclick = e => {
+  const k = e.target.dataset.k; if (!k || k === kind) return;
+  kind = k;
+  $("#kinds").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === k));
+  $("#q").placeholder = k === "videos" ? "Search videos" : "Search songs";
+  $("#results").replaceChildren();
+  if ($("#q").value.trim()) $("#sform").requestSubmit();
+};
+
+function renderNext() {
+  const q = state.music?.queue || [], el = $("#next"), sig = q.map(s => s.id).join();
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  el.replaceChildren(...(q.length ? q.map((s, i) => songRow(s, () => cmd("jump", { i }))) :
+    [Object.assign(document.createElement("div"), { className: "empty", textContent: "Nothing queued." })]));
+}
+
+$("#sform").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("#q").value.trim(); if (!q) return;
+  $("#q").blur();
+  $("#results").innerHTML = '<div class="empty">Searching…</div>';
+  const videos = kind === "videos";
+  const r = await api((videos ? "/api/search?q=" : "/api/msearch?q=") + encodeURIComponent(q));
+  if (r.status === 401) return unpair();
+  const list = await r.json().catch(() => []);
+  const playing = () => { toast("Playing on " + where()); $('#tabs [data-t="now"]').click(); };
+  const none = Object.assign(document.createElement("div"), { className: "empty", textContent: videos ? "No videos found." : "No songs found." });
+  $("#results").replaceChildren(...(!Array.isArray(list) || !list.length ? [none] : videos
+    ? list.map((v, i) => videoRow(v, () => { cmd("video_play", { videos: list, i }); playing(); }))
+    : list.map((s, i) => songRow(s, () => { cmd("play", { songs: list, i }); playing(); },
+      () => { cmd("queue", { song: s }); toast("Added to queue"); }))));
+};
+
+async function poll() {
+  if (!token) return;
+  const r = await api("/api/state").catch(() => null);
+  if (r?.status === 401) return unpair();
+  if (r?.ok) { state = await r.json(); $("#pc").textContent = state.name ? "● " + state.name : ""; renderNow(); renderNext(); }
+  else $("#pc").textContent = "Reconnecting…";
+  setTimeout(poll, 1000);
+}
+
+if (token) { $("#main").hidden = false; poll(); } else $("#pair").hidden = false;
+</script>
+</body>
+</html>

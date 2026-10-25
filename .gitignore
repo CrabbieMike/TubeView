@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+# build outputs
+/build/
+/dist/
+packaging/bin/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+# never commit the Android signing key
+*.p12
+*.jks

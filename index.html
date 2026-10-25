@@ -1,0 +1,3154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TubeView</title>
+<style>
+:root {
+  --bg: #0b0b0f; --surface: #16161d; --surface-2: #20202a; --text: #f4f4f7;
+  --muted: #9a9aab; --accent: #e8e8ff; --radius: 14px;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, "Inter", sans-serif; overflow-x: hidden; }
+button { font: inherit; cursor: pointer; border: 0; }
+
+header { position: fixed; inset: 0 0 auto; z-index: 10; display: flex; align-items: center; gap: 24px;
+  padding: 18px 48px; background: linear-gradient(var(--bg) 0%, transparent 100%); }
+header.solid { background: rgba(11,11,15,.97); }  /* scrolled: the page doesn't show through the menu */
+.acct.on:has(.acct-pic)::before { display: none; }
+.acct span { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+@media (max-width: 480px) { .acct span { max-width: 90px; } }
+.acct-pic { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin: -4px 8px -4px -6px; }
+.logo { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; cursor: pointer; }
+.logo span { color: var(--muted); font-weight: 500; }
+nav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+nav button { white-space: nowrap; }
+nav button { background: none; color: var(--muted); padding: 8px 14px; border-radius: 999px; font-weight: 600; }
+nav button.on, nav button:hover { color: var(--text); background: rgba(255,255,255,.08); }
+.search { margin-left: auto; display: flex; align-items: center; background: rgba(255,255,255,.08);
+  backdrop-filter: blur(12px); border-radius: 999px; padding: 0 16px; flex: 0 1 380px; min-width: 0; }
+.search input { flex: 1; min-width: 0; background: none; border: 0; color: var(--text); font: inherit; padding: 10px 8px; outline: none; }
+
+.hero { position: relative; height: 78vh; min-height: 480px; display: flex; align-items: flex-end;
+  padding: 0 48px 72px; background: #000 center/cover no-repeat; }
+.hero::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--bg) 0%, rgba(11,11,15,.6) 45%, transparent 75%),
+              linear-gradient(0deg, var(--bg) 0%, transparent 45%); }
+.hero-body { position: relative; z-index: 1; max-width: 620px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 12px; }
+.hero h1 { font-size: clamp(28px, 4vw, 52px); line-height: 1.05; letter-spacing: -1px; margin-bottom: 14px; }
+.meta { color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+.meta b { color: var(--text); font-weight: 600; }
+.actions { display: flex; gap: 12px; margin-top: 24px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 26px; border-radius: 999px; font-weight: 700; }
+.btn.primary { background: var(--accent); color: #000; }
+.btn.ghost { background: rgba(255,255,255,.14); color: var(--text); backdrop-filter: blur(10px); }
+.btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+main { position: relative; z-index: 2; margin-top: -40px; padding-bottom: 60px; }
+main.no-hero { margin-top: 0; padding-top: 90px; }
+.row { margin-bottom: 34px; }
+.row h2 { font-size: 20px; padding: 0 48px; margin-bottom: 12px; letter-spacing: -.3px; }
+/* rails and grids share one column width so cards line up across rows */
+:root { --cols: 3; --rcols: 3; }  /* set from window width and the card size setting, see applyLayout() */
+.rail { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - (var(--rcols) - 1) * 14px) / var(--rcols));
+  gap: 14px; overflow-x: auto; padding: 8px 48px 14px; scroll-padding: 0 48px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+.grid { display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 22px 14px; padding: 8px 48px 0; }
+
+.card { min-width: 0; align-self: start;  /* buttons center their content: cards with one-line titles would sit lower */
+   scroll-snap-align: start; cursor: pointer; background: none; color: inherit; text-align: left; padding: 0; }
+.thumb { position: relative; aspect-ratio: 16/9; border-radius: var(--radius); overflow: hidden; background: var(--surface);
+  transition: transform .25s, box-shadow .25s; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card:hover .thumb, .card:focus-visible .thumb { transform: scale(1.04); box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 0 0 2px var(--accent); }
+.card:focus-visible { outline: none; }
+.dur { position: absolute; right: 8px; bottom: 8px; background: rgba(0,0,0,.75); padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.card .t { margin-top: 10px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .c { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.skeleton .thumb { animation: pulse 1.2s infinite alternate; }
+@keyframes pulse { to { background: var(--surface-2); } }
+
+.detail { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.7); backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center; padding: 24px; }
+.detail.open { display: flex; }
+.sheet { width: min(900px, 100%); max-height: 90vh; overflow: auto; background: var(--surface); border-radius: 20px; }
+.sheet .backdrop { aspect-ratio: 16/7; background: #000 center/cover; position: relative; }
+.sheet .backdrop::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 60%); }
+.sheet .body { padding: 0 32px 32px; margin-top: -60px; position: relative; z-index: 1; }
+.sheet h1 { font-size: 28px; line-height: 1.15; margin-bottom: 10px; }
+.sheet .desc { color: var(--muted); white-space: pre-wrap; margin-top: 22px; font-size: 14px; max-height: 260px; overflow: auto; }
+.close { position: absolute; top: 14px; right: 14px; z-index: 2; width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(0,0,0,.6); color: var(--text); font-size: 18px; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface-2);
+  padding: 12px 22px; border-radius: 999px; opacity: 0; transition: opacity .3s; z-index: 30; pointer-events: none; }
+.toast.show { opacity: 1; }
+.empty { color: var(--muted); padding: 0 48px; }
+.acct { background: rgba(255,255,255,.08); color: var(--text); padding: 9px 18px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; flex: none; }
+.acct.on::before { content: "●"; color: #5ee08a; margin-right: 8px; }
+.chan { align-self: start; flex: 0 0 112px; background: none; color: inherit; text-align: center; padding: 0; cursor: pointer; }
+.chan img, .chan .ph { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; background: var(--surface-2);
+  display: grid; place-items: center; margin: 0 auto 8px; font-size: 34px; font-weight: 700; transition: transform .25s, box-shadow .25s; }
+.chan:hover img, .chan:hover .ph, .chan:focus-visible img { transform: scale(1.06); box-shadow: 0 0 0 2px var(--accent); }
+.badge { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .5px; background: #e5303a; }
+.badge.soon { background: rgba(0,0,0,.75); }
+.row h2.head { display: flex; align-items: center; gap: 12px; }
+.row h2 .ava { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.row h2 .more { margin-left: auto; background: none; color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap; flex: none; }
+.row h2.head > span:first-child { min-width: 0; }
+.row h2 .more:hover { color: var(--text); }
+.row h2 .count { color: var(--muted); font-weight: 500; }
+.row h2 input { margin-left: auto; background: rgba(255,255,255,.08); border: 0; border-radius: 999px; color: var(--text);
+  font: inherit; font-size: 14px; padding: 8px 16px; width: min(260px, 45vw); outline: none; }
+.chan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 22px 10px; padding: 8px 48px; }
+@media (max-width: 700px) { .chan-grid { padding: 8px 16px; } }
+.chan span { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.form { padding: 36px 32px 32px; display: grid; gap: 16px; }
+.form ol { color: var(--muted); padding-left: 20px; display: grid; gap: 6px; }
+.form a { color: var(--accent); }
+.acct-who { display: flex; align-items: center; gap: 12px; font-size: 18px; }
+.acct-who img { width: 48px; height: 48px; border-radius: 50%; }
+.form details.alt { color: var(--muted); font-size: 14px; }
+.form details.alt summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+.form .code { font-size: 44px; font-weight: 800; letter-spacing: 6px; color: var(--text); }
+.form .code-url { font-size: 22px; font-weight: 700; color: var(--accent); }
+.form .err { color: #ff8a8a; font-size: 13px; white-space: pre-wrap; }
+
+/* music */
+body.has-mbar main { padding-bottom: 120px; }  /* keep the last row clear of the docked bar */
+body.has-mbar .toast { bottom: 100px; }
+body.has-mbar .player.mini { bottom: 96px; }
+.rail.songs { grid-auto-columns: calc((100% - var(--cols) * 14px) / (var(--cols) + 1)); }
+.scard { min-width: 0; align-self: start; background: none; color: inherit; text-align: left; padding: 0; cursor: pointer; }
+.scard .art { position: relative; aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; background: var(--surface); transition: transform .25s, box-shadow .25s; }
+.scard .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scard:hover .art, .scard:focus-visible .art { transform: scale(1.04); box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 0 0 2px var(--accent); }
+.scard:focus-visible { outline: none; }
+.scard .art::after { content: "▶"; position: absolute; right: 10px; bottom: 10px; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: #000; font-size: 15px; opacity: 0; translate: 0 6px; transition: .2s; }
+.scard:hover .art::after { opacity: 1; translate: 0 0; }
+.scard .t { margin-top: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scard .c { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scard.playing .t { color: var(--accent); }
+.msearch { display: flex; gap: 10px; padding: 0 48px 24px; }
+.msearch input { flex: 1; max-width: 560px; background: var(--surface); border: 0; border-radius: 999px; color: var(--text); font: inherit; padding: 12px 20px; outline: none; }
+.msearch input:focus { box-shadow: 0 0 0 2px var(--accent); }
+.tracks { display: grid; padding: 0 48px; }
+.track { display: grid; grid-template-columns: 28px 48px minmax(0, 1fr) minmax(0, .6fr) 56px; gap: 14px; align-items: center; padding: 8px 12px;
+  border-radius: 12px; background: none; color: inherit; text-align: left; cursor: pointer; }
+.track:hover, .track:focus-visible { background: var(--surface); outline: none; }
+.track .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.track img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: var(--surface-2); }
+.track .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track .c, .track .al, .track .d { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track .d { text-align: right; font-variant-numeric: tabular-nums; }
+.track.playing .t, .track.playing .n { color: var(--accent); }
+
+.mbar { position: fixed; inset: auto 0 0; z-index: 35; height: 80px; padding: 0 24px; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px;
+  background: var(--surface); border-top: 1px solid rgba(255,255,255,.07); box-shadow: 0 -12px 40px rgba(0,0,0,.45); }
+.mbar[hidden], .mfull[hidden] { display: none; }
+.mbar .now { display: flex; align-items: center; gap: 12px; min-width: 0; background: none; color: inherit; text-align: left; padding: 0; cursor: pointer; }
+.mbar .now img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; }
+.mbar .now b, .mfull .info b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mbar .now span { display: block; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mctl { display: flex; align-items: center; gap: 4px; }
+.mctl .p-btn.big { width: 48px; height: 48px; background: var(--accent); color: #000; }
+.mctl .p-btn.big:hover { background: var(--accent); filter: brightness(1.1); }
+.mctl .p-btn.on { color: var(--accent); }
+.mctl .p-btn small { position: absolute; font-size: 9px; font-weight: 900; translate: 9px 8px; }
+.mctl .p-btn { position: relative; }
+.mtools { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.mtools input[type=range] { width: 100px; accent-color: var(--accent); }
+.mseek { position: absolute; inset: -9px 0 auto; height: 16px; display: flex; align-items: center; }  /* sits on the bar's top edge */
+.mseek input, .mfull .seek input { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.mbar .mseek input { height: 4px; }
+.mfull { position: fixed; inset: 0; z-index: 38; background: #0b0b0f center/cover; display: grid; overflow: hidden; }
+.mfull::before { content: ""; position: absolute; inset: 0; background: inherit; filter: blur(60px) brightness(.35) saturate(1.4); transform: scale(1.2); }
+.mfull .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; padding: 70px 64px 40px; height: 100vh; }
+.mfull .side { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 22px; min-width: 0; }
+.mfull .bigart { width: min(42vw, 62vh, 560px); aspect-ratio: 1; border-radius: 20px; object-fit: cover; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+.mfull .info { width: min(42vw, 62vh, 560px); }
+.mfull .info b { font-size: 28px; letter-spacing: -.5px; }
+.mfull .info span { color: var(--muted); font-size: 17px; }
+.mfull .seek { width: min(42vw, 62vh, 560px); }
+.mfull .seek div { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.mfull .mctl .p-btn.big { width: 64px; height: 64px; }
+.mfull .close { position: absolute; top: 18px; left: 18px; }
+.mfull .panel { display: flex; flex-direction: column; min-height: 0; }
+.mfull .panel .tabs { padding: 0 0 12px; }
+.mfull .pane { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; padding-right: 6px; }
+.mfull .track { padding: 6px 10px; grid-template-columns: 22px 44px minmax(0, 1fr) 48px 28px; }
+.mfull .track img { width: 44px; height: 44px; }
+.mfull .track .x { background: none; color: var(--muted); font-size: 16px; padding: 0; }
+.mfull .track .x:hover { color: #ff8a8a; }
+.ly { padding: 30vh 0; }
+.ly p { font-size: clamp(20px, 2.2vw, 30px); font-weight: 800; line-height: 1.35; margin: 0 0 18px; opacity: .35; cursor: pointer; transition: opacity .3s; }
+.ly p.on { opacity: 1; }
+.ly p:hover { opacity: .75; }
+.ly.plain p { opacity: .85; cursor: default; font-size: 20px; font-weight: 600; white-space: pre-wrap; }
+/* karaoke: the line being sung fills in word by word (--p: how much of a word has been sung, 0 to 1) */
+.ly.words p.on span { background: linear-gradient(90deg, var(--text) calc(var(--p, 0) * 100%), rgba(244,244,247,.35) calc(var(--p, 0) * 100%));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ly-src { color: var(--muted); font-size: 13px; margin: -20vh 0 30vh; }
+/* lyrics: they fill the screen, with the song and its controls in a bar along the bottom */
+.mfull.lyr .wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "panel" "side";
+  gap: 14px; padding: 64px max(48px, calc(50vw - 520px)) 22px; height: 100vh; min-height: 0; overflow: hidden; }
+.mfull.lyr .panel { grid-area: panel; min-height: 0; }
+.mfull.lyr .side { grid-area: side; display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "art info ctl" "seek seek seek";
+  gap: 6px 16px; align-items: center; justify-content: stretch; }
+.mfull.lyr .bigart { grid-area: art; width: 56px; border-radius: 10px; box-shadow: none; }
+.mfull.lyr .info { grid-area: info; width: auto; display: flex; flex-direction: column; min-width: 0; }
+.mfull.lyr .info b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mfull.lyr .info span { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mfull.lyr .seek { grid-area: seek; width: 100%; }
+.mfull.lyr .mctl { grid-area: ctl; }
+.mfull.lyr .mctl .p-btn.big { width: 52px; height: 52px; }
+.mfull.lyr .ly { padding: 22vh 0 30vh; }
+.mfull.lyr .ly p { font-size: clamp(24px, 3.4vw, 42px); }
+@media (max-width: 600px) {
+  .mfull.lyr .wrap { padding: 56px 16px 14px; }
+  .mfull.lyr .side { grid-template-columns: 48px minmax(0, 1fr); grid-template-areas: "art info" "seek seek" "ctl ctl"; }
+  .mfull.lyr .bigart { width: 48px; }
+  .mfull.lyr .mctl { justify-self: center; }
+}
+@media (max-width: 900px) {
+  /* one column: the player scrolls as a whole, so all of Up next can be seen; the close button and the background stay put */
+  .mfull { overflow-y: auto; overscroll-behavior: contain; }
+  .mfull::before { position: fixed; }
+  .mfull .close { position: fixed; z-index: 2; background: rgba(0,0,0,.35); border-radius: 50%; }
+  .mfull .wrap { grid-template-columns: 1fr; padding: 60px 20px 20px; height: auto; min-height: 100%; }
+  .mfull .bigart, .mfull .info, .mfull .seek { width: min(86vw, 420px); }
+  .mfull .panel { min-height: 0; }
+  .mfull:not(.lyr) .pane { flex: none; overflow: visible; padding-right: 0; }
+  /* phones hide the track number, so the queue's columns are: cover, song, length, remove */
+  .mfull .track { grid-template-columns: 44px minmax(0, 1fr) 40px 24px; gap: 12px; padding: 6px 4px; width: 100%; }
+}
+@media (max-width: 1150px) { #mb-time { display: none; } .mtools input[type=range] { width: 70px; } }
+@media (max-width: 700px) {
+  .mbar { grid-template-columns: minmax(0, 1fr) auto; } .mtools { display: none; }
+  .msearch, .tracks { padding: 0 16px; } .msearch { padding-bottom: 18px; }
+  .track { grid-template-columns: 48px minmax(0, 1fr) 48px; } .track .n, .track .al { display: none; }
+}
+
+/* context menu */
+.ctx { position: fixed; z-index: 60; min-width: 230px; max-width: 320px; padding: 6px; border-radius: 14px; display: grid;
+  background: rgba(22,22,29,.97); backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.06); }
+.ctx[hidden] { display: none; }
+.ctx .ttl { padding: 8px 12px 6px; font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx button { display: flex; justify-content: space-between; gap: 18px; background: none; color: var(--text); text-align: left;
+  padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+.ctx button:hover, .ctx button:focus-visible { background: rgba(255,255,255,.09); outline: none; }
+.ctx button.danger { color: #ff8a8a; }
+.ctx kbd { background: none; color: var(--muted); padding: 0; font-weight: 500; }
+.ctx hr { border: 0; border-top: 1px solid rgba(255,255,255,.08); margin: 5px 6px; }
+
+/* downloads */
+.dl-jobs { padding: 0 48px 24px; display: grid; gap: 10px; }
+.dl-job { background: var(--surface); border-radius: 14px; padding: 14px 18px; display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center; }
+.dl-job .bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.dl-job .bar i { display: block; height: 100%; background: var(--accent); transition: width .5s; }
+.dl-job small { color: var(--muted); }
+.dl-job.err small { color: #ff8a8a; }
+.dl-item { display: grid; gap: 6px; min-width: 0; }
+.dl-item .del { justify-self: start; background: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 2px 0; }
+.dl-item .del:hover { color: #ff8a8a; }
+.badge.kind { left: auto; right: 8px; top: 8px; background: rgba(0,0,0,.75); }
+@media (max-width: 700px) { .dl-jobs { padding: 0 16px 20px; } }
+
+/* TV mode: bigger everything, strong focus ring for arrow-key / controller navigation */
+:root.lite *, :root.lite *::before { backdrop-filter: none !important; }  /* Android: blur costs more GPU than TVs have */
+:root.lite .mfull::before { filter: brightness(.3); transform: none; }
+:root.lite .player.audio::before { background: rgba(0,0,0,.6); }
+:root.lite .card:hover .thumb, :root.lite .card:focus-visible .thumb, :root.lite .scard:focus-visible .art { box-shadow: 0 0 0 2px var(--accent); }
+:root.tv body { font-size: 18px; }
+:root.tv .card .t { font-size: 18px; }
+:root.tv :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+:root.tv .card:focus, :root.tv .scard:focus, :root.tv .chan:focus { outline: none; }
+:root.tv .card:focus .thumb, :root.tv .scard:focus .art { transform: scale(1.05); box-shadow: 0 0 0 3px var(--accent), 0 10px 26px rgba(0,0,0,.6); }
+:root.tv .chan:focus img, :root.tv .chan:focus .ph { transform: scale(1.06); box-shadow: 0 0 0 3px var(--accent); }
+:root.tv .btn:focus, :root.tv .p-btn:focus { outline: none; background: var(--accent); color: #000; }
+/* TV: a menu down the left side instead of the top bar; it opens out with labels while it has focus */
+nav .ni, .gear span, .acct-ico { display: none; }
+:root.tv header .gear span { display: inline; }
+:root.tv body { padding-left: 88px; }
+:root.tv main.no-hero { padding-top: 40px; }
+:root.tv header { inset: 0 auto 0 0; width: 88px; flex-direction: column; align-items: stretch; gap: 4px; padding: 24px 14px;
+  overflow: hidden auto; scrollbar-width: none; background: rgba(11,11,15,.94); transition: width .15s ease; }
+:root.tv header::-webkit-scrollbar { display: none; }
+:root.tv header:focus-within { width: 290px; background: var(--bg); box-shadow: 24px 0 60px rgba(0,0,0,.7); }
+:root.tv .logo { order: -2; padding: 0 16px 10px; white-space: nowrap; opacity: 0; }
+:root.tv .search { order: -1; }
+:root.tv header { flex-wrap: nowrap; }  /* not the narrow-window two-row header: TVs often render at 960px wide */
+:root.tv nav { flex-direction: column; gap: 4px; overflow: visible; order: 0; flex-basis: auto; margin-left: 0; }
+:root.tv nav button, :root.tv .acct, :root.tv .gear, :root.tv .search { display: flex; align-items: center; gap: 18px; flex: none; width: 100%;
+  height: clamp(40px, 8vh, 54px); margin: 0; padding: 0 18px; border-radius: 12px; background: none; color: var(--muted); font-size: 19px; font-weight: 600; white-space: nowrap; }
+:root.tv .acct { margin-top: auto; }
+:root.tv .acct.on::before { display: none; }
+:root.tv nav .ni, :root.tv header .gear svg, :root.tv .search > svg, :root.tv .acct-ico, :root.tv .acct-pic { display: block; flex: none; width: 24px; height: 24px; margin: 0; }
+:root.tv nav button span, :root.tv .acct span, :root.tv .gear span, :root.tv .search input { opacity: 0; }
+:root.tv header:focus-within :is(.logo, nav button span, .acct span, .gear span, .search input) { opacity: 1; }
+:root.tv .search input { padding: 0; font-size: 19px; color: inherit; }
+:root.tv .search input::placeholder { color: inherit; }
+:root.tv nav button.on { color: var(--text); background: rgba(255,255,255,.08); }
+:root.tv header :focus, :root.tv .search:focus-within { outline: none; background: var(--accent); color: #000; }
+:root.tv .sugg { top: 100%; }
+:root.tv .p-btn svg { width: 30px; height: 30px; }
+
+/* search filters + suggestions, comments */
+.search { position: relative; }
+.sugg { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: rgba(22,22,29,.97); backdrop-filter: blur(12px);
+  border-radius: 14px; padding: 6px; display: grid; box-shadow: 0 16px 40px rgba(0,0,0,.5); z-index: 5; }
+.sugg[hidden] { display: none; }
+.sugg button { background: none; color: var(--text); text-align: left; padding: 9px 12px; border-radius: 8px; font-weight: 600; }
+.sugg button.on, .sugg button:hover { background: rgba(255,255,255,.08); }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 48px 22px; }
+.filters select { background: var(--surface); color: var(--text); border: 0; border-radius: 999px; padding: 9px 14px; font: inherit; font-weight: 600; }
+.filters select.on { background: var(--accent); color: #000; }
+.comments { margin-top: 26px; }
+.comments h2 { font-size: 18px; margin-bottom: 14px; }
+.cmt { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 10px 0; }
+.cmt img, .cmt .ph { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); object-fit: cover; }
+.cmt .who { font-size: 13px; font-weight: 700; }
+.cmt .who span { color: var(--muted); font-weight: 500; margin-left: 8px; }
+.cmt .who .tag { background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+.cmt p { font-size: 14px; white-space: pre-wrap; margin-top: 3px; overflow-wrap: anywhere; }
+.cmt .likes { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.sheet .actions { flex-wrap: wrap; }
+.rail.chans { display: flex; }
+@media (max-width: 700px) { .filters { padding: 0 16px 18px; } }
+
+/* playlists, channel page, page headers */
+.pl .thumb::after { content: attr(data-count); position: absolute; inset: 0 0 0 auto; width: 38%; display: grid; place-items: center;
+  background: rgba(0,0,0,.72); font-weight: 800; font-size: 15px; }
+.pl .thumb.noimg { display: grid; place-items: center; font-size: 34px; color: var(--muted); }
+.page-head { padding: 0 48px 18px; display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.page-head h1 { font-size: 34px; letter-spacing: -1px; line-height: 1.1; }
+.page-head .meta { margin-top: 6px; }
+.page-head .actions { margin: 0 0 0 auto; }
+.row h2 .more { margin-left: auto; }
+.ch-banner { margin: 0 48px; aspect-ratio: 6.2 / 1; border-radius: 20px; background: var(--surface) center/cover; }
+.ch-info { display: flex; align-items: center; gap: 22px; padding: 22px 48px 10px; }
+.ch-info img, .ch-info .ph { width: 104px; height: 104px; border-radius: 50%; object-fit: cover; background: var(--surface-2); flex: none;
+  display: grid; place-items: center; font-size: 40px; font-weight: 800; }
+.ch-info h1 { font-size: 32px; letter-spacing: -.8px; }
+.ch-info h1 .ok { color: var(--muted); font-size: 20px; margin-left: 6px; }
+.ch-info p { color: var(--muted); font-size: 14px; margin-top: 6px; max-width: 760px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tabs { display: flex; gap: 6px; padding: 8px 48px 18px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { background: none; color: var(--muted); padding: 8px 16px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+.tabs button.on, .tabs button:hover { color: var(--text); background: rgba(255,255,255,.08); }
+@media (max-width: 700px) { .page-head, .ch-info, .tabs { padding-left: 16px; padding-right: 16px; } .ch-banner { margin: 0 16px; }
+  .ch-info img, .ch-info .ph { width: 72px; height: 72px; } .ch-info h1 { font-size: 24px; } }
+
+/* settings */
+.gear { color: var(--muted); }
+.gear.on, .gear:hover { color: var(--text); }
+.settings { max-width: 880px; margin: 0 auto; padding: 0 48px 80px; }
+.settings > h1 { font-size: 36px; letter-spacing: -1px; margin-bottom: 28px; }
+.set-sec { margin-bottom: 30px; }
+.set-sec > h2 { font-size: 12px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin: 0 0 10px 6px; }
+.set-card { background: var(--surface); border-radius: 18px; overflow: hidden; }
+.set-row { display: flex; align-items: center; gap: 18px; padding: 16px 22px; }
+.set-row + .set-row { border-top: 1px solid rgba(255,255,255,.06); }
+.set-row .lab { flex: 1; min-width: 0; }
+.set-row .lab b { font-weight: 600; }
+.set-row .lab small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.set-row select { background: var(--surface-2); color: var(--text); border: 0; border-radius: 10px; padding: 9px 12px; font: inherit; font-weight: 600; }
+.set-row input[type=range] { width: 180px; accent-color: var(--accent); }
+.switch { appearance: none; width: 46px; height: 28px; border-radius: 999px; background: var(--surface-2); position: relative; cursor: pointer; flex: none; transition: background .2s; }
+.switch::before { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: translate .2s, background .2s; }
+.switch:checked { background: var(--accent); }
+.switch:checked::before { translate: 18px; background: #000; }
+.switch:focus-visible, .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatches { display: flex; gap: 10px; }
+.swatch { width: 28px; height: 28px; border-radius: 50%; border: 0; cursor: pointer; }
+.swatch.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--text); }
+.set-row .btn { padding: 9px 18px; }
+.set-row .btn.danger { background: rgba(229,48,58,.16); color: #ff8a8a; }
+.keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 24px; padding: 18px 22px; }
+.keys div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 14px; }
+kbd { background: var(--surface-2); color: var(--text); border-radius: 6px; padding: 2px 8px; font: 600 12px/1.6 ui-monospace, monospace; white-space: nowrap; }
+.set-out { padding: 0 22px 16px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+.eq { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; padding: 6px 22px 22px; }
+.eq label { display: grid; justify-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.eq input { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 140px; accent-color: var(--accent); }
+:root.no-motion *:not(.p-spin) { transition: none !important; animation: none !important; }
+:root.no-motion .card:hover .thumb { transform: none; }
+@media (max-width: 700px) { .settings { padding: 0 16px 60px; } .set-row { flex-wrap: wrap; padding: 14px 16px; } }
+/* small screens (a foldable's outer screen): a setting's list or slider goes under its name */
+@media (max-width: 480px) { .set-row:has(> select, > input[type=range]) .lab { flex-basis: 100%; } .set-row > select { flex: 1; }
+  .set-row > input[type=range] { width: 100%; } .row h2 { font-size: 18px; } .sheet .actions .btn { padding: 10px 16px; } }
+
+/* sponsorblock / dearrow */
+.set-row .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; vertical-align: 1px; }
+.p-seg { position: absolute; inset: 0 auto 0 0; opacity: .85; pointer-events: none; }
+.p-seg.poi { width: 4px !important; margin-left: -2px; opacity: 1; }
+.p-sbskip { position: absolute; right: 32px; bottom: 110px; background: rgba(22,22,29,.92); backdrop-filter: blur(12px); color: var(--text);
+  padding: 12px 20px; border-radius: 999px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.p-sbskip[hidden], .p-note[hidden], .p-full[hidden] { display: none; }
+.p-sbskip:hover { background: var(--accent); color: #000; }
+.p-note { position: absolute; left: 32px; bottom: 110px; background: rgba(22,22,29,.92); backdrop-filter: blur(12px);
+  padding: 8px 8px 8px 18px; border-radius: 999px; display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 14px; }
+.p-note button { background: rgba(255,255,255,.12); color: var(--text); border-radius: 999px; padding: 6px 14px; font-weight: 700; }
+.p-full { margin-left: auto; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: .5px; color: #000; }
+@media (max-width: 700px) { .p-sbskip { right: 12px; bottom: 96px; } .p-note { left: 12px; bottom: 96px; } }
+
+/* player */
+body.watching { overflow: hidden; }
+.player { position: fixed; inset: 0; z-index: 40; background: #000; }
+.player[hidden] { display: none; }
+.player video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.p-ui { position: absolute; inset: 0; opacity: 0; transition: opacity .3s; cursor: none; }
+.player.ui .p-ui { opacity: 1; cursor: default; }
+.p-ui::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(rgba(0,0,0,.75), transparent 22%, transparent 62%, rgba(0,0,0,.85)); }
+.p-top { position: absolute; inset: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 22px 32px; }
+.p-title { font-size: 22px; font-weight: 700; letter-spacing: -.3px; line-height: 1.2; }
+.p-ch { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.p-btn { background: none; color: var(--text); width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.p-btn:hover, .p-btn:focus-visible { background: rgba(255,255,255,.12); outline: none; }
+.p-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.p-center { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 84px; height: 84px;
+  background: rgba(255,255,255,.14); backdrop-filter: blur(12px); }
+.p-center svg { width: 40px; height: 40px; }
+.p-bottom { position: absolute; inset: auto 0 0; padding: 0 32px 18px; }
+.p-seek { position: relative; height: 24px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+.p-track { position: relative; width: 100%; height: 4px; border-radius: 4px; background: rgba(255,255,255,.2); transition: height .15s; }
+.p-seek:hover .p-track, .p-seek.drag .p-track { height: 6px; }
+.p-buf, .p-prog { position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
+.p-buf { background: rgba(255,255,255,.35); }
+.p-prog { background: var(--accent); }
+.p-knob { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--accent);
+  scale: 0; transition: scale .15s; }
+.p-seek:hover .p-knob, .p-seek.drag .p-knob { scale: 1; }
+.p-tip { position: absolute; bottom: 26px; translate: -50%; background: rgba(0,0,0,.85); padding: 3px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 700; display: none; pointer-events: none; }
+.p-seek:hover .p-tip, .p-seek.drag .p-tip { display: block; }
+.p-bar { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.p-time { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 10px; white-space: nowrap; }
+.p-time.live::before { content: "●"; color: #e5303a; margin-right: 6px; }
+.p-bar .grow { flex: 1; }
+.p-vol { width: 90px; accent-color: var(--accent); }
+.p-pill { background: rgba(255,255,255,.1); color: var(--text); padding: 7px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; margin: 0 4px; }
+.p-pill:hover { background: rgba(255,255,255,.18); }
+.p-menu { position: absolute; right: 32px; bottom: 84px; background: rgba(22,22,29,.96); backdrop-filter: blur(12px);
+  border-radius: 14px; padding: 6px; min-width: 150px; display: grid; }
+.p-menu[hidden] { display: none; }
+.p-menu h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 8px 14px 4px; }
+.p-menu button { background: none; color: var(--text); text-align: left; padding: 9px 14px; border-radius: 8px; font-weight: 600; }
+.p-menu button:hover { background: rgba(255,255,255,.08); }
+.p-menu button.on::after { content: "✓"; float: right; margin-left: 16px; color: var(--muted); }
+.p-spin { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; pointer-events: none;
+  border: 4px solid rgba(255,255,255,.2); border-top-color: var(--accent); animation: spin .9s linear infinite; display: none; }
+.player.loading .p-spin { display: block; }
+.player.loading .p-center { opacity: 0; }
+@keyframes spin { to { rotate: 360deg; } }
+.p-err { position: absolute; inset: 0; display: grid; place-content: center; gap: 18px; text-align: center; background: rgba(0,0,0,.75); font-size: 18px; }
+.p-err[hidden] { display: none; }
+.p-next { position: absolute; right: 32px; bottom: 110px; width: min(380px, calc(100% - 24px)); padding: 16px; border-radius: 18px;
+  background: rgba(22,22,29,.92); backdrop-filter: blur(14px); box-shadow: 0 20px 50px rgba(0,0,0,.5); display: grid; gap: 12px; }
+.p-next[hidden] { display: none; }
+.p-next .lbl { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.p-next .lbl b { color: var(--text); }
+.p-next .row2 { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center; }
+.p-next img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; display: block; }
+.p-next .t { font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.p-next .c { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.p-next .actions { margin: 0; }
+.p-next .btn { padding: 9px 18px; }
+.p-next .bar { height: 3px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+.p-next .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+@media (max-width: 700px) { .p-next { right: 12px; bottom: 96px; } .p-next .row2 { grid-template-columns: 110px 1fr; } }
+/* player extras: chapters, previews, captions, audio-only, mini player */
+.p-chap { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: rgba(0,0,0,.7); pointer-events: none; z-index: 1; }
+.p-tip span { display: block; text-align: center; }
+#p-tip-ch { color: var(--muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-prev { display: none; border-radius: 8px; margin: 0 auto 6px; background-repeat: no-repeat; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+.p-tip.has-prev { background: none; padding: 0; }
+.p-tip.has-prev .p-prev { display: block; }
+.p-tip.has-prev span { background: rgba(0,0,0,.85); border-radius: 6px; padding: 2px 8px; width: fit-content; margin: 2px auto 0; }
+.p-pill.on { background: var(--accent); color: #000; }
+.p-art { display: none; position: absolute; left: 50%; top: 45%; translate: -50% -50%; width: min(46vw, 640px); aspect-ratio: 16/9;
+  border-radius: 18px; background: center/cover; box-shadow: 0 30px 80px rgba(0,0,0,.6); pointer-events: none; }
+.player.audio { background: #000 center/cover var(--poster); }
+.player.audio::before { content: ""; position: absolute; inset: 0; backdrop-filter: blur(40px) brightness(.4); }
+.player.audio video { opacity: 0; }
+.player.audio .p-art { display: block; }
+.player.mini { inset: auto 24px 24px auto; width: 420px; height: 236px; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.player.mini .p-ui, .player.mini .p-next, .player.mini .p-sbskip, .player.mini .p-note, .player.mini .p-spin,
+.player.pip .p-ui, .player.pip .p-next, .player.pip .p-note { display: none; }
+.player.mini .p-art, .player.pip .p-art { width: 62%; }
+.p-minibar { display: none; position: absolute; inset: 0; background: rgba(0,0,0,.4); opacity: 0; transition: opacity .2s;
+  align-items: center; justify-content: center; gap: 12px; cursor: pointer; }
+.player.mini .p-minibar, .player.pip .p-minibar { display: flex; }
+.player.mini:hover .p-minibar, .player.pip:hover .p-minibar, .p-minibar:focus-within { opacity: 1; }
+.p-minibar .x { position: absolute; top: 6px; right: 6px; }
+@media (max-width: 700px) { .player.mini { width: 60vw; height: 34vw; right: 12px; bottom: 12px; } #p-ch-btn { display: none; } }
+
+.pbar { position: absolute; inset: auto 0 0; height: 4px; background: rgba(255,255,255,.25); }
+.pbar i { display: block; height: 100%; background: var(--accent); }
+
+/* narrower windows: tabs move to a second header row */
+@media (max-width: 1150px) {
+  header { flex-wrap: wrap; row-gap: 8px; }
+  nav { order: 5; flex-basis: 100%; margin-left: -14px; }
+  main.no-hero { padding-top: 140px; }
+}
+
+@media (max-width: 700px) {
+  .p-top, .p-bottom { padding-left: 12px; padding-right: 12px; } .p-vol, #p-rw, #p-ff { display: none; } .p-title { font-size: 17px; }
+  header { padding: 14px 16px; gap: 12px; }
+  .hero { padding: 0 16px 56px; } .row h2, .empty { padding: 0 16px; } .rail { padding: 8px 16px 14px; }
+  .grid { padding: 8px 16px 0; } .rail { scroll-padding: 0 16px; } .search { width: auto; flex: 1; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" onclick="go('home')">Tube<span>View</span></div>
+  <nav id="nav"></nav>
+  <form class="search" onsubmit="event.preventDefault(); go('search', this.q.value)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input name="q" placeholder="Search YouTube" aria-label="Search YouTube" autocomplete="off" role="combobox" aria-controls="sugg" aria-autocomplete="list">
+    <div class="sugg" id="sugg" role="listbox" hidden></div>
+  </form>
+  <button class="acct" id="acct" onclick="openAccount()">Sign in</button>
+  <button class="p-btn gear" id="gear" onclick="go('settings')" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.47.47 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg><span>Settings</span></button>
+</header>
+
+<section class="hero" id="hero"></section>
+<main id="main"></main>
+
+<div class="detail" id="detail" onclick="if (event.target === this) closeDetail()">
+  <div class="sheet" role="dialog" aria-modal="true" id="sheet"></div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="ctx" id="ctx" role="menu" hidden></div>
+
+<audio id="ma" preload="auto"></audio>
+<audio id="ma2" preload="auto"></audio>
+<div class="mbar" id="mbar" hidden>
+  <div class="mseek"><input type="range" id="mb-seek" min="0" max="1" step="0.1" value="0" aria-label="Song position"></div>
+  <button class="now" id="mb-now" aria-label="Open music player"><img id="mb-art" alt=""><div style="min-width:0"><b id="mb-title"></b><span id="mb-artist"></span></div></button>
+  <div class="mctl">
+    <button class="p-btn" id="mb-shuffle" aria-label="Shuffle"></button>
+    <button class="p-btn" id="mb-prev" aria-label="Previous"></button>
+    <button class="p-btn big" id="mb-play" aria-label="Play or pause"></button>
+    <button class="p-btn" id="mb-next" aria-label="Next"></button>
+    <button class="p-btn" id="mb-repeat" aria-label="Repeat"></button>
+  </div>
+  <div class="mtools">
+    <span class="p-time" id="mb-sleep" hidden></span>
+    <span class="p-time" id="mb-time"></span>
+    <button class="p-btn" id="mb-lyrics" aria-label="Lyrics"></button>
+    <button class="p-btn" id="mb-queue" aria-label="Queue"></button>
+    <button class="p-btn" id="mb-mute" aria-label="Mute"></button>
+    <input type="range" id="mb-vol" min="0" max="1" step="0.01" aria-label="Music volume">
+    <button class="p-btn" id="mb-close" aria-label="Stop music"></button>
+  </div>
+</div>
+<div class="mfull" id="mfull" hidden role="dialog" aria-label="Now playing">
+  <button class="p-btn close" id="mf-close" aria-label="Close"></button>
+  <div class="wrap">
+    <div class="side">
+      <img class="bigart" id="mf-art" alt="">
+      <div class="info"><b id="mf-title"></b><span id="mf-artist"></span></div>
+      <div class="seek"><input type="range" id="mf-seek" min="0" max="1" step="0.1" value="0" aria-label="Song position">
+        <div><span id="mf-t"></span><span id="mf-d"></span></div></div>
+      <div class="mctl">
+        <button class="p-btn" id="mf-shuffle" aria-label="Shuffle"></button>
+        <button class="p-btn" id="mf-prev" aria-label="Previous"></button>
+        <button class="p-btn big" id="mf-play" aria-label="Play or pause"></button>
+        <button class="p-btn" id="mf-next" aria-label="Next"></button>
+        <button class="p-btn" id="mf-repeat" aria-label="Repeat"></button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="tabs" id="mf-tabs"><button data-t="queue" class="on">Up next</button><button data-t="lyrics">Lyrics</button></div>
+      <div class="pane" id="mf-queue"></div>
+      <div class="pane" id="mf-lyrics" hidden></div>
+    </div>
+  </div>
+</div>
+
+<div class="player" id="player" hidden>
+  <video id="pv" playsinline></video>
+  <div class="p-art" id="p-art"></div>
+  <div class="p-spin"></div>
+  <div class="p-ui" id="p-ui">
+    <div class="p-top">
+      <button class="p-btn" id="p-back" aria-label="Close player"></button>
+      <div><div class="p-title" id="p-title"></div><div class="p-ch" id="p-ch"></div></div>
+      <span class="p-full" id="p-full" hidden></span>
+    </div>
+    <button class="p-btn p-center" id="p-center" aria-label="Play or pause"></button>
+    <div class="p-bottom">
+      <div class="p-seek" id="p-seek"><div class="p-track" id="p-track"><div class="p-buf" id="p-buf"></div>
+        <div class="p-prog" id="p-prog"></div><div class="p-knob" id="p-knob"></div></div>
+        <div class="p-tip" id="p-tip"><div class="p-prev" id="p-prev"></div><span id="p-tip-t"></span><span id="p-tip-ch"></span></div></div>
+      <div class="p-bar">
+        <button class="p-btn" id="p-play" aria-label="Play or pause"></button>
+        <button class="p-btn" id="p-rw" aria-label="Back 10 seconds"></button>
+        <button class="p-btn" id="p-ff" aria-label="Forward 10 seconds"></button>
+        <button class="p-btn" id="p-skip" aria-label="Next video"></button>
+        <button class="p-btn" id="p-mute" aria-label="Mute"></button>
+        <input class="p-vol" id="p-vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
+        <span class="p-time" id="p-time"></span>
+        <span class="grow"></span>
+        <button class="p-pill" id="p-sleep" hidden aria-label="Sleep timer"></button>
+        <button class="p-pill" id="p-hl" hidden>★ Jump to highlight</button>
+        <button class="p-pill" id="p-ch-btn" hidden>Chapters</button>
+        <button class="p-pill" id="p-cc" hidden aria-label="Subtitles">CC</button>
+        <button class="p-pill" id="p-aud" hidden aria-label="Audio track">Audio</button>
+        <button class="p-pill" id="p-rate" aria-label="Playback speed"></button>
+        <button class="p-pill" id="p-q" aria-label="Quality"></button>
+        <button class="p-btn" id="p-pip" hidden aria-label="Picture in picture"></button>
+        <button class="p-btn" id="p-mini" aria-label="Mini player"></button>
+        <button class="p-btn" id="p-fs" aria-label="Fullscreen"></button>
+      </div>
+    </div>
+    <div class="p-menu" id="p-menu" hidden></div>
+  </div>
+  <div class="p-minibar" id="p-minibar">
+    <button class="p-btn" id="p-mini-play" aria-label="Play or pause"></button>
+    <button class="p-btn" id="p-expand" aria-label="Expand player"></button>
+    <button class="p-btn x" id="p-mini-close" aria-label="Close player"></button>
+  </div>
+  <button class="p-sbskip" id="p-sbskip" hidden></button>
+  <div class="p-note" id="p-note" hidden role="status"><span id="p-note-t"></span><button id="p-note-undo">Undo</button></div>
+  <div class="p-next" id="p-next" hidden role="status">
+    <div class="lbl">Up next in <b id="p-next-n">8</b></div>
+    <div class="row2"><img id="p-next-img" alt=""><div><div class="t" id="p-next-title"></div><div class="c" id="p-next-ch"></div></div></div>
+    <div class="bar"><i id="p-next-bar"></i></div>
+    <div class="actions"><button class="btn primary" id="p-next-play">▶ Play now</button><button class="btn ghost" id="p-next-cancel">Cancel</button></div>
+  </div>
+  <div class="p-err" id="p-err" hidden><p>Couldn't play this video here.</p>
+    <div class="actions" style="justify-content:center"><button class="btn primary" id="p-mpv">Open in mpv</button>
+      <button class="btn ghost" id="p-close">Close</button></div></div>
+</div>
+
+<script>
+// Home rails: [title, search query]. Edit to taste.
+const SECTIONS = {
+  home: [["Trending Now", "trending today"], ["Music", "new music video 2026"], ["Gaming", "gaming highlights"],
+         ["Tech", "tech review"], ["Science", "science documentary"], ["Trailers", "official trailer"]],
+  gaming: [["Highlights", "gaming highlights"], ["Let's Play", "lets play"], ["Speedruns", "speedrun world record"], ["Esports", "esports grand final"]],
+  learn: [["Science", "science documentary"], ["Programming", "programming tutorial"], ["History", "history documentary"], ["Space", "space nasa"]],
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const thumb = (id, q = "hqdefault") => `https://i.ytimg.com/vi/${id}/${q}.jpg`;
+const fmtDur = s => !s ? "" : [Math.floor(s / 3600), Math.floor(s / 60) % 60, Math.floor(s % 60)]
+  .filter((v, i) => v || i).map((v, i) => i ? String(v).padStart(2, "0") : v).join(":");
+const fmtNum = n => n == null ? "" : Intl.NumberFormat("en", { notation: "compact" }).format(n);
+// Settings, history, resume points and playlists live in TubeView's data file (/api/data), so the app window
+// and browser tabs share them. Writes are batched; localStorage is only a fallback if TubeView can't be reached.
+const DB = { data: {}, dirty: new Set(), timer: 0 };
+const dbGet = k => DB.data[k] ?? null;
+function dbSet(k, v) {
+  if (v == null) delete DB.data[k]; else DB.data[k] = v;
+  try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {}
+  DB.dirty.add(k);
+  clearTimeout(DB.timer);
+  DB.timer = setTimeout(dbFlush, 400);
+}
+function dbFlush() {
+  if (!DB.dirty.size) return;
+  const changes = Object.fromEntries([...DB.dirty].map(k => [k, DB.data[k] ?? null]));
+  DB.dirty.clear();
+  fetch("/api/data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes), keepalive: true }).catch(() => {});
+}
+async function dbLoad() {
+  const server = await fetch("/api/data").then(r => r.ok ? r.json() : null).catch(() => null);
+  const local = {};
+  try { for (const k of Object.keys(localStorage)) if (k !== "tv:moved") local[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+  DB.data = server || local;
+  // first run in this browser/window: move its older data into TubeView without overwriting anything there
+  if (server && !localStorage.getItem("tv:moved")) {
+    for (const [k, v] of Object.entries(local)) if (!(k in server)) { DB.data[k] = v; DB.dirty.add(k); }
+    dbFlush();
+    try { localStorage.setItem("tv:moved", "1"); } catch {}
+  }
+}
+addEventListener("pagehide", dbFlush);
+const store = { get: k => dbGet(k) || [], set: (k, v) => dbSet(k, v) };
+const cache = {};
+// The Android app injects TubeViewAndroid: native video player, system media controls, PC discovery, TV detection.
+const ANDROID = window.TubeViewAndroid || null;
+const TV_DEFAULT = !!ANDROID?.isTv?.();
+// Engines without H.264/AAC (the packaged apps' Qt WebEngine) ask the server for VP9 + Opus instead.
+const WEB = window.MediaSource && !MediaSource.isTypeSupported('video/mp4; codecs="avc1.640028, mp4a.40.2"') ? "&web=1" : "";
+let me = { signed_in: false, browser: null };
+// signed in to YouTube some way that gives subscriptions, likes and playlists
+const account = () => !!(me.signed_in || me.ytv);
+const PAGES = () => ["home", ...(account() ? ["subscriptions"] : []), "library", "music", "gaming", "learn", "downloads",
+  ...(ANDROID && !TV_DEFAULT ? ["pcremote"] : [])];  // a TV is what gets controlled, not the controller
+const PAGE_NAMES = { pcremote: "Remote control" };
+// icons for the TV side menu
+const PAGE_ICONS = {
+  home: '<path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  subscriptions: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M7 3.5h10M10.5 10.5l4 2.5-4 2.5z"/>',
+  library: '<path d="M5 4v16M10 4v16M14.5 4.5l5 15"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  gaming: '<rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M7 10.5v4M5 12.5h4M15.5 12h.01M18 14h.01"/>',
+  learn: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3.5 2.5 8.5 2.5 12 0v-5"/>',
+  downloads: '<path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/>',
+  pcremote: '<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M10 14h.01M14 14h.01M10 17.5h.01M14 17.5h.01"/>',
+};
+const icon = (d, cls = "ni") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const api = async (path) => cache[path] ??= fetch(path).then(r => r.ok ? r.json() : Promise.reject(r)).catch(e => { delete cache[path]; throw e; });
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2500); }
+
+function card(v, list = []) {
+  const b = document.createElement("button");
+  const pr = progress()[v.id];
+  b.className = "card";
+  b.dataset.id = v.id;
+  b.innerHTML = `<div class="thumb"><img loading="lazy" src="${thumb(v.id)}" alt="">${pr?.d ? `<div class="pbar"><i style="width:${Math.min(100, pr.t / pr.d * 100)}%"></i></div>` : ""}${v.duration ? `<span class="dur">${fmtDur(v.duration)}</span>` : ""}${v.live ? `<span class="badge ${v.live === "is_upcoming" ? "soon" : ""}">${v.live === "is_live" ? "LIVE" : "UPCOMING"}</span>` : ""}</div>
+    <div class="t">${esc(v.title)}</div><div class="c">${esc(v.channel)}${v.views ? " · " + fmtNum(v.views) + " views" : ""}</div>`;
+  b.onclick = () => openDetail(v, list);
+  b._v = v; b._list = list;
+  onScreen ? onScreen.observe(b) : brand(b);
+  return b;
+}
+function brand(b) {
+  const v = b._v;
+  dearrow(v).then(d => {
+    if (d?.title) { b.querySelector(".t").textContent = d.title; b.title = "Original title: " + v.title; }
+    if (d?.thumb) swapImg(b.querySelector("img"), d.thumb);
+  });
+}
+// DeArrow (a request per card) only for cards about to be seen, not the hundred further down the page
+const onScreen = window.IntersectionObserver ? new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { onScreen.unobserve(e.target); brand(e.target); }
+}), { rootMargin: "400px" }) : null;
+
+function row(title, container = "rail") {
+  const s = document.createElement("section");
+  s.className = "row";
+  s.innerHTML = `<h2>${esc(title)}</h2><div class="${container}">${'<div class="card skeleton"><div class="thumb"></div></div>'.repeat(6)}</div>`;
+  $("#main").append(s);
+  return s.lastElementChild;
+}
+
+function fill(el, vids) {
+  if (pref("hideShorts", false)) vids = vids.filter(v => !v.short && !(v.duration && v.duration <= 60));
+  el.replaceChildren(...vids.map(v => card(v, vids))); if (!vids.length) el.outerHTML = '<p class="empty">Nothing found.</p>'; }
+
+function hero(v, tag, list = []) {
+  const h = $("#hero");
+  h.style.display = "";
+  $("#main").className = "";
+  // maxres doesn't exist for every video; fall back to hq
+  const img = new Image(); img.onload = () => h.style.backgroundImage = `url(${img.naturalWidth > 120 ? img.src : thumb(v.id)})`;
+  img.src = thumb(v.id, "maxresdefault");
+  h.innerHTML = `<div class="hero-body"><span class="tag">${esc(tag)}</span><h1>${esc(v.title)}</h1>
+    <div class="meta"><b>${esc(v.channel)}</b>${v.views ? `<span>${fmtNum(v.views)} views</span>` : ""}${v.duration ? `<span>${fmtDur(v.duration)}</span>` : ""}</div>
+    <div class="actions"><button class="btn primary" id="hp">▶ Play</button><button class="btn ghost" id="hi">More info</button></div></div>`;
+  $("#hp").onclick = () => play(v, list);
+  $("#hi").onclick = () => openDetail(v, list);
+  dearrow(v).then(d => {
+    if (d?.title && h.contains($("#hp"))) h.querySelector("h1").textContent = d.title;
+  });
+}
+
+async function go(page, q, extra) {
+  window.scrollTo(0, 0);
+  onScreen?.disconnect();
+  $("#main").dataset.page = page;
+  $("#main").replaceChildren();
+  $("#main").className = "";
+  const inNav = $("#nav").contains(document.activeElement);
+  $("#nav").innerHTML = PAGES().map(p =>
+    `<button class="${p === page ? "on" : ""}" onclick="go('${p}')">${icon(PAGE_ICONS[p] || '<circle cx="12" cy="12" r="8"/>')}<span>${PAGE_NAMES[p] || p[0].toUpperCase() + p.slice(1)}</span></button>`).join("");
+  if (inNav) $("#nav .on")?.focus();  // the button you pressed was just replaced; keep the menu where it was
+
+  if (page === "search") return searchPage(q.trim());
+  $("#gear").classList.toggle("on", page === "settings");
+  if (page === "settings") return settingsPage();
+  if (page === "subscriptions") return subsPage();
+  if (page === "home") return me.signed_in ? recsPage() : me.ytv ? tvHomePage() : homePage();
+  if (page === "channel") return channelPage(q, extra);
+  if (page === "library") return libraryPage();
+  if (page === "collection") return collectionPage(q);
+  if (page === "playlist") return playlistPage(q);
+  if (page === "myplaylist") return myPlaylistPage(q);
+  if (page === "downloads") return downloadsPage();
+  if (page === "music") return musicPage(q, extra);
+  if (page === "pcremote") return pcRemotePage();
+  railsPage(SECTIONS[page]);
+}
+
+// rows of search results; the first one's top video is the hero unless `heroTaken` says another row has it
+function railsPage(sections, heroTaken = Promise.resolve(false)) {
+  sections.forEach(([title, query], i) => {
+    const el = row(title);
+    api("/api/search?q=" + encodeURIComponent(query)).then(async vids => {
+      const own = i === 0 && vids[0] && !(await heroTaken);
+      if (!el.isConnected) return;  // user navigated away while loading
+      if (own) hero(vids[0], title, vids);
+      fill(el, vids.slice(own ? 1 : 0));
+    }).catch(() => el.outerHTML = '<p class="empty">Could not load this row.</p>');
+  });
+}
+
+// Home with the YouTube TV sign-in: YouTube's own rows of recommendations (falls back to homePage if they don't load)
+async function tvHomePage() {
+  const history = store.get("history");
+  if (pref("continueRow", true)) {
+    const cw = row("Continue Watching");
+    if (history.length) fill(cw, history);
+    // then what you watched on YouTube elsewhere (local plays first, no duplicates)
+    if (pref("ytHistory", true)) api("/api/library?name=history").then(yt => {
+      if (!cw.isConnected) return;
+      const seen = new Set(history.map(v => v.id));
+      fill(cw, [...history, ...yt.filter(v => !seen.has(v.id))].slice(0, 40));
+    }).catch(() => history.length || cw.parentElement.remove());
+    else if (!history.length) cw.parentElement.remove();
+  }
+  const first = row("Recommended for you");
+  const subs = me.ytv ? rowMore("New From Your Subscriptions", () => go("subscriptions")) : null;
+  if (subs) api("/api/subs").then(vids => subs.isConnected && fill(subs, vids.slice(0, 30))).catch(e => fail(subs, e));
+  const r = await api("/api/tvhome").catch(() => null);
+  if (!first.isConnected) return;  // user navigated away while loading
+  if (!r?.rows.length) { $("#main").replaceChildren(); return homePage(); }
+  const [top, ...rest] = r.rows;
+  const lead = top.videos.find(v => !v.short) || top.videos[0];
+  hero(lead, top.title || "Recommended for you", top.videos);
+  if (top.title) first.previousElementSibling.textContent = top.title;
+  fill(first, top.videos.filter(v => v !== lead));
+  for (const sh of rest) fill(row(sh.title || "Recommended for you"), sh.videos);
+}
+
+// Home without a YouTube sign-in: picks from what you watched
+function homePage() {
+  const history = store.get("history");
+  if (history.length && pref("continueRow", true)) fill(row("Continue Watching"), history);
+  const picks = history.length ? row("Top Picks for You") : null;
+  const subs = me.ytv ? rowMore("New From Your Subscriptions", () => go("subscriptions")) : null;
+  delete cache["/api/foryou"];  // new history since last time: the server answers from its cache and refreshes
+  const forYou = picks ? api("/api/foryou").catch(() => null) : Promise.resolve(null);
+  if (subs) api("/api/subs").then(vids => subs.isConnected && fill(subs, vids.slice(0, 30))).catch(e => fail(subs, e));
+  railsPage(SECTIONS.home, forYou.then(r => !!r?.picks.length));
+  forYou.then(r => {
+    if (!picks?.isConnected) return;
+    if (!r?.picks.length) return picks.parentElement.remove();
+    hero(r.picks[0], "Recommended for you", r.picks);
+    fill(picks, r.picks.slice(1, 25));
+    let after = (subs || picks).parentElement;
+    for (const b of r.because) {
+      const el = row("Because you watched " + b.seed.title);
+      after.after(el.parentElement);
+      after = el.parentElement;
+      fill(el, b.videos);
+    }
+  });
+}
+
+const addHistory = v => store.set("history", [v, ...store.get("history").filter(h => h.id !== v.id)].slice(0, 20));
+async function playMpv(v, start = 0) {
+  if (!me.mpv) return toast("mpv isn't installed");
+  // mpv gets the SponsorBlock categories set to auto-skip / skip button (it can't show the highlight button)
+  const cats = mode => pref("sb", true) ? SB_CATS.map(c => c[0]).filter(c => c !== "poi_highlight" && sbMode(c) === mode).join(",") : "";
+  const r = await fetch(`/api/play?id=${v.id}&q=${pref("quality", 1080)}&skip=${cats("skip")}&ask=${cats("button")}&start=${Math.floor(start)}`, { method: "POST" }).catch(() => null);
+  if (!r?.ok) return toast("Couldn't start mpv");
+  toast("Opening in mpv…");
+  addHistory(v);
+}
+const play = (v, list) => pref("player", "tubeview") === "mpv" && me.mpv ? playMpv(v) : watch(v, list);
+
+const ago = ts => {
+  const s = Date.now() / 1000 - ts, f = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  for (const [u, n] of [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]])
+    if (s >= n) return f.format(-Math.floor(s / n), u);
+  return "just now";
+};
+const commentHTML = cs => cs.length ? cs.map(c => `<div class="cmt">${c.avatar ? `<img loading="lazy" src="${esc(c.avatar)}" alt="">` : '<div class="ph"></div>'}
+  <div><div class="who">${esc(c.author)}${c.uploader ? ' <span class="tag">Creator</span>' : ""}${c.pinned ? " <span>📌 Pinned</span>" : ""}${c.time ? `<span>${ago(c.time)}</span>` : ""}</div>
+  <p>${esc(c.text)}</p><div class="likes">${c.likes ? "👍 " + fmtNum(c.likes) : ""}${c.hearted ? " · ❤️ by creator" : ""}</div></div></div>`).join("")
+  : '<p class="empty" style="padding:0">No comments.</p>';
+
+async function download(v, kind) {
+  const r = await fetch(`/api/download?id=${v.id}&kind=${kind}&q=${pref("quality", 1080)}${WEB}`, { method: "POST" }).catch(() => null);
+  toast(r?.ok ? `Downloading ${kind === "audio" ? "audio" : "video"}… see Downloads` : r?.status === 409 ? "Already downloading" : "Couldn't start the download");
+}
+
+async function openDetail(v, list = []) {
+  const sheet = $("#sheet");
+  let comments = pref("comments", true) ? '<p class="empty" style="padding:0">Loading comments…</p>' : null;
+  const render = (d, loading) => {
+    sheet.innerHTML = `<button class="close" aria-label="Close" onclick="closeDetail()">✕</button>
+      <div class="backdrop" style="background-image:url(${thumb(v.id)})"></div>
+      <div class="body"><h1>${esc(shownTitle(v))}</h1>
+        <div class="meta"><b>${esc(d.channel)}</b>${d.views ? `<span>${fmtNum(d.views)} views</span>` : ""}
+          ${d.likes ? `<span>${fmtNum(d.likes)} likes</span>` : ""}${d.dislikes != null ? `<span>${fmtNum(d.dislikes)} dislikes</span>` : ""}${d.duration ? `<span>${fmtDur(d.duration)}</span>` : ""}
+          ${d.date ? `<span>${d.date.replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3")}</span>` : ""}</div>
+        <div class="actions"><button class="btn primary" id="dp">▶ Play</button><button class="btn ghost" id="dm">Open in mpv</button>
+          <button class="btn ghost" id="dc">More from channel</button>
+          <button class="btn ghost" id="dd">⬇ Download</button><button class="btn ghost" id="da">⬇ Audio</button>${loading ? "" : '<span id="gacts"></span>'}</div>
+        <div class="desc">${loading ? "Loading…" : esc(d.description)}</div>
+        ${comments != null ? `<div class="comments"><h2>Comments</h2><div id="cm">${comments}</div></div>` : ""}</div>`;
+    $("#dd").onclick = () => download(v, "video");
+    $("#da").onclick = () => download(v, "audio");
+    $("#dp").onclick = () => play(v, list);
+    $("#dm").onclick = () => playMpv(v);
+    $("#dc").onclick = () => { closeDetail(); d.channel_id ? go("channel", d.channel_id) : go("search", d.channel); };
+  };
+  render(v, true);
+  $("#detail").classList.add("open");
+  $("#detail").dataset.id = v.id;
+  $("#dp").focus();
+  dearrow(v).then(() => $("#detail").dataset.id === v.id && (sheet.querySelector("h1").textContent = shownTitle(v)));
+  if (comments != null) api("/api/comments?id=" + v.id).then(commentHTML).catch(() => "<p class=\"empty\" style=\"padding:0\">Couldn't load comments.</p>")
+    .then(html => { comments = html; if ($("#detail").dataset.id === v.id && $("#cm")) $("#cm").innerHTML = html; });
+  try {
+    const [d, ryd] = await Promise.all([api("/api/video?id=" + v.id), pref("ryd", true) ? dislikes(v.id) : null]);
+    if ($("#detail").dataset.id === v.id) { render({ ...d, likes: d.likes ?? ryd?.likes, dislikes: ryd?.dislikes }, false); ytActions(v, d); }
+  }
+  catch { if ($("#detail").dataset.id === v.id) sheet.querySelector(".desc").textContent = "Couldn't load details."; }
+}
+function noHero() { $("#hero").style.display = "none"; $("#main").className = "no-hero"; }
+const fail = (el, e) => e.json?.().then(j => el.outerHTML = `<p class="empty">${esc(j.error || "Failed to load.")}</p>`)
+  .catch(() => el.outerHTML = '<p class="empty">Failed to load.</p>');
+
+function chanCard(c) {
+  const b = document.createElement("button");
+  b.className = "chan";
+  const src = c.avatar?.startsWith("//") ? "https:" + c.avatar : c.avatar;
+  b.innerHTML = `${src ? `<img loading="lazy" src="${esc(src)}" alt="">` : `<div class="ph">${esc(c.name[0] || "?")}</div>`}<span>${esc(c.name)}</span>`;
+  b.onclick = () => go("channel", c.id);
+  b._c = c;
+  return b;
+}
+
+// search filters: [key, label, options]; values match the server's search_params()
+const FILTERS = [
+  ["sort", "Sort", [["", "Relevance"], ["date", "Upload date"], ["views", "View count"], ["rating", "Rating"]]],
+  ["date", "Uploaded", [["", "Any time"], ["hour", "Last hour"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["year", "This year"]]],
+  ["type", "Type", [["", "Everything"], ["video", "Videos"], ["channel", "Channels"], ["playlist", "Playlists"], ["live", "Live now"]]],
+  ["length", "Length", [["", "Any length"], ["short", "Under 4 minutes"], ["medium", "4–20 minutes"], ["long", "Over 20 minutes"]]],
+];
+const F = { sort: "", date: "", type: "", length: "" };
+
+async function searchPage(q) {
+  if (!q) return;
+  noHero();
+  $(".search input").value = q;
+  pageHead(`“${q}”`, "");
+  const bar = Object.assign(document.createElement("div"), { className: "filters" });
+  for (const [k, label, opts] of FILTERS) {
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", label);
+    sel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${F[k] === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    sel.classList.toggle("on", !!F[k]);
+    sel.onchange = () => { F[k] = sel.value; go("search", q); };
+    bar.append(sel);
+  }
+  $("#main").append(bar);
+  const vidsEl = row("Videos", "grid");
+  try {
+    const r = await api(`/api/results?q=${encodeURIComponent(q)}&` + new URLSearchParams(F));
+    if (!vidsEl.isConnected) return;
+    const sec = vidsEl.parentElement;
+    if (r.channels.length) { const el = row("Channels", "rail"); el.className = "rail chans"; el.replaceChildren(...r.channels.map(chanCard)); sec.before(el.parentElement); }
+    if (r.playlists.length) { const el = row("Playlists"); fillWith(el, r.playlists, plCard); sec.before(el.parentElement); }
+    if (r.videos.length || !(r.channels.length || r.playlists.length)) fill(vidsEl, r.videos); else sec.remove();
+  } catch (e) { fail(vidsEl, e); }
+}
+
+(function suggestions() {
+  const input = $(".search input"), box = $("#sugg");
+  let timer, items = [], sel = -1, typed = "";
+  const show = () => {
+    box.replaceChildren(...items.map((t, i) => {
+      const b = Object.assign(document.createElement("button"), { type: "button", textContent: t, className: i === sel ? "on" : "" });
+      b.setAttribute("role", "option");
+      b.onmousedown = e => { e.preventDefault(); input.value = t; box.hidden = true; go("search", t); };
+      return b;
+    }));
+    box.hidden = !items.length;
+  };
+  input.addEventListener("input", () => {
+    typed = input.value;
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = input.value.trim();
+      items = q ? await fetch("/api/suggest?q=" + encodeURIComponent(q)).then(r => r.json()).catch(() => []) : [];
+      if (input.value.trim() !== q) return;  // typed more meanwhile
+      sel = -1; show();
+    }, 150);
+  });
+  input.addEventListener("keydown", e => {
+    if (box.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = items.length;  // -1 = back to what was typed
+      sel = e.key === "ArrowDown" ? (sel + 1 >= n ? -1 : sel + 1) : (sel < 0 ? n - 1 : sel - 1);
+      input.value = sel >= 0 ? items[sel] : typed;
+      show();
+    } else if (e.key === "Escape") { box.hidden = true; e.stopPropagation(); }
+  });
+  input.addEventListener("blur", () => box.hidden = true);
+  input.form.addEventListener("submit", () => { box.hidden = true; input.blur(); });
+})();
+
+function plCard(pl) {
+  const b = document.createElement("button");
+  b.className = "card pl";
+  b.innerHTML = `<div class="thumb ${pl.thumb ? "" : "noimg"}" data-count="${pl.count != null ? "≡ " + pl.count : "≡"}">${pl.thumb ? `<img loading="lazy" src="${esc(pl.thumb)}" alt="">` : "≡"}</div>
+    <div class="t">${esc(pl.title)}</div><div class="c">${esc(pl.channel || "Playlist")}</div>`;
+  b.onclick = () => go(pl.local ? "myplaylist" : "playlist", pl.id);
+  b._pl = pl;
+  return b;
+}
+
+function fillWith(el, items, make, empty = "Nothing here yet.") {
+  if (!items.length) return el.outerHTML = `<p class="empty">${esc(empty)}</p>`;
+  el.replaceChildren(...items.map(make));
+}
+
+// a row whose heading has a "See all" button
+function rowMore(title, onMore, container) {
+  const el = row(title, container), h = el.previousElementSibling;
+  h.className = "head";
+  h.innerHTML = `<span>${esc(title)}</span><button class="more">See all →</button>`;
+  h.querySelector(".more").onclick = onMore;
+  return el;
+}
+
+function pageHead(title, meta, actions = []) {
+  const h = document.createElement("div");
+  h.className = "page-head";
+  h.innerHTML = `<div><h1>${esc(title)}</h1>${meta ? `<div class="meta">${meta}</div>` : ""}</div><div class="actions"></div>`;
+  h.querySelector(".actions").append(...actions);
+  $("#main").append(h);
+  return h;
+}
+
+const button = (label, cls, onclick) => Object.assign(document.createElement("button"), { className: "btn " + cls, textContent: label, onclick });
+const shuffled = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+
+const LIBRARY = [["watchlater", "Watch Later"], ["liked", "Liked Videos"], ["history", "History"]];
+
+// ---------- TubeView playlists (kept in TubeView's data file; items are videos or songs) ----------
+const myLists = () => dbGet("playlists") || [];
+const saveLists = lists => dbSet("playlists", lists);
+const listCard = pl => plCard({ id: pl.id, local: true, title: pl.name, count: pl.items.length, channel: "TubeView playlist",
+  thumb: pl.items[0] && thumb(pl.items[0].id) });
+const asItem = (x, kind) => ({ id: x.id, kind, title: x.title, channel: x.channel || x.artist || "", artist: x.artist,
+  duration: x.duration, channel_id: x.channel_id, album: x.album });
+
+function newList(name, first) {
+  name = (name || "").trim();
+  if (!name) return null;
+  const pl = { id: "tv" + Date.now().toString(36), name, items: first ? [first] : [], at: Date.now() };
+  saveLists([pl, ...myLists()]);
+  return pl;
+}
+function addToList(id, item) {
+  const lists = myLists(), pl = lists.find(l => l.id === id);
+  if (!pl) return;
+  if (pl.items.some(x => x.id === item.id)) return toast(`Already in “${pl.name}”`);
+  pl.items.push(item);
+  saveLists(lists);
+  toast(`Added to “${pl.name}”`);
+}
+// "Add to playlist" submenu, opened where the context menu was
+function playlistMenu(item) {
+  showMenu(MENU.x, MENU.y, "Add to playlist", [
+    ...myLists().map(pl => [pl.name, () => addToList(pl.id, item)]),
+    "-",
+    ["New playlist…", () => { const pl = newList(prompt("Name for the new playlist:"), item); if (pl) toast(`Added to “${pl.name}”`); }],
+  ]);
+}
+function playList(pl, shuffle) {
+  const items = shuffle ? shuffled(pl.items) : pl.items;
+  if (!items.length) return;
+  if (items.every(x => x.kind === "song")) playSongs(items, 0);
+  else watch(items[0], items);
+}
+
+function myPlaylistPage(id) {
+  noHero();
+  const pl = myLists().find(l => l.id === id);
+  if (!pl) return pageHead("Playlist not found", "");
+  const head = pageHead(pl.name, `<span>${pl.items.length} item${pl.items.length === 1 ? "" : "s"}</span><span>TubeView playlist</span>`, [
+    button("▶ Play all", "primary", () => playList(pl)), button("Shuffle", "ghost", () => playList(pl, true)),
+    button("Rename", "ghost", () => { const n = prompt("Rename playlist:", pl.name)?.trim(); if (n) { saveLists(myLists().map(l => l.id === id ? { ...l, name: n } : l)); go("myplaylist", id); } }),
+    button("Delete", "ghost", () => { if (confirm(`Delete “${pl.name}”?`)) { saveLists(myLists().filter(l => l.id !== id)); go("library"); } })]);
+  const vids = pl.items.filter(x => x.kind !== "song"), songsIn = pl.items.filter(x => x.kind === "song");
+  if (vids.length) { const el = row("Videos", "grid"); fill(el, vids); el.querySelectorAll(".card").forEach(c => c._inList = id); }
+  if (songsIn.length) {
+    const list = Object.assign(document.createElement("div"), { className: "tracks" });
+    list.replaceChildren(...songsIn.map((s, i) => Object.assign(trackRow(s, songsIn, i + 1), { _inList: id })));
+    const h = Object.assign(document.createElement("section"), { className: "row" });
+    h.innerHTML = "<h2>Songs</h2>";
+    h.append(list);
+    $("#main").append(h);
+  }
+  if (!pl.items.length) head.insertAdjacentHTML("afterend", '<p class="empty">Empty for now: right-click any video or song and choose “Add to playlist”.</p>');
+}
+function removeFromList(id, itemId) {
+  saveLists(myLists().map(l => l.id === id ? { ...l, items: l.items.filter(x => x.id !== itemId) } : l));
+  go("myplaylist", id);
+}
+
+function libraryPage() {
+  noHero();
+  pageHead("Library", me.signed_in || me.ytv ? "Your playlists, plus your YouTube Watch Later, likes and history."
+    : "Your playlists. Sign in to also see your YouTube likes, playlists, history and Watch Later.");
+  const mine = row("TubeView Playlists", "grid"), h = mine.previousElementSibling;
+  h.className = "head";
+  h.innerHTML = "<span>TubeView Playlists</span>";
+  h.append(Object.assign(button("+ New playlist", "more", () => { const pl = newList(prompt("Name for the new playlist:")); if (pl) go("myplaylist", pl.id); }), { className: "more" }));
+  fillWith(mine, myLists(), listCard, "No playlists yet. Right-click any video or song and choose “Add to playlist”.");
+  if (!account()) return;
+  for (const [name, title] of LIBRARY) {
+    const el = rowMore(title, () => go("collection", name));
+    api("/api/library?name=" + name).then(vids => el.isConnected && fill(el, vids.slice(0, 30))).catch(e => fail(el, e));
+  }
+  const pls = row("Your YouTube Playlists", "grid");
+  api("/api/playlists").then(list => pls.isConnected && fillWith(pls, list, plCard, "No playlists yet.")).catch(e => fail(pls, e));
+}
+
+async function collectionPage(name) {
+  noHero();
+  const title = (LIBRARY.find(l => l[0] === name) || [, name])[1];
+  const head = pageHead(title, "Loading…");
+  const el = row("", "grid");
+  el.previousElementSibling.remove();
+  try {
+    const vids = await api("/api/library?name=" + name);
+    if (!el.isConnected) return;
+    head.querySelector(".meta").textContent = `${vids.length} videos`;
+    head.querySelector(".actions").append(button("▶ Play all", "primary", () => vids[0] && watch(vids[0], vids)),
+      button("Shuffle", "ghost", () => { const s = shuffled(vids); s[0] && watch(s[0], s); }));
+    fill(el, vids);
+  } catch (e) { fail(el, e); }
+}
+
+async function playlistPage(id) {
+  noHero();
+  const head = pageHead("Playlist", "Loading…");
+  const el = row("", "grid");
+  el.previousElementSibling.remove();
+  try {
+    const pl = await api("/api/playlist?id=" + encodeURIComponent(id));
+    if (!el.isConnected) return;
+    head.querySelector("h1").textContent = pl.title || "Playlist";
+    head.querySelector(".meta").innerHTML = `${pl.channel ? `<b>${esc(pl.channel)}</b>` : ""}<span>${pl.videos.length} videos</span>`;
+    head.querySelector(".actions").append(button("▶ Play all", "primary", () => pl.videos[0] && watch(pl.videos[0], pl.videos)),
+      button("Shuffle", "ghost", () => { const s = shuffled(pl.videos); s[0] && watch(s[0], s); }));
+    fill(el, pl.videos);
+  } catch (e) { fail(el, e); }
+}
+
+async function downloadsPage() {
+  noHero();
+  let data;
+  try { data = await fetch("/api/downloads").then(r => r.json()); } catch { data = { dir: "", items: [], jobs: [] }; }
+  if ($("#main").dataset.page !== "downloads") return;
+  const head = pageHead("Downloads", `<span>${esc(data.dir)}</span>`,
+    [button("Open folder", "ghost", () => fetch("/api/open-downloads", { method: "POST" }))]);
+  const jobsEl = Object.assign(document.createElement("div"), { className: "dl-jobs" });
+  head.after(jobsEl);
+  const grid = row("", "grid");
+  grid.previousElementSibling.remove();
+
+  const renderItems = items => {
+    const list = items.map(i => ({ ...i, local: i.kind }));
+    if (!list.length) return grid.replaceChildren(Object.assign(document.createElement("p"), { className: "empty",
+      textContent: "Nothing downloaded yet. Use ⬇ Download or ⬇ Audio in a video's details." }));
+    grid.replaceChildren(...list.map(v => {
+      const wrap = Object.assign(document.createElement("div"), { className: "dl-item" });
+      const c = card(v, list);
+      c.onclick = () => watch(v, list);
+      c.querySelector(".thumb").insertAdjacentHTML("beforeend", `<span class="badge kind">${v.kind === "audio" ? "AUDIO" : "VIDEO"}</span>`);
+      const del = button("Delete", "del", async () => {
+        if (!confirm(`Delete “${v.title}” from this computer?`)) return;
+        await fetch(`/api/download-delete?id=${v.id}&kind=${v.kind}`, { method: "POST" });
+        wrap.remove();
+      });
+      del.className = "del";
+      wrap.append(c, del);
+      return wrap;
+    }));
+  };
+  const renderJobs = jobs => {
+    jobsEl.replaceChildren(...jobs.map(j => {
+      const el = Object.assign(document.createElement("div"), { className: "dl-job" + (j.status === "error" ? " err" : "") });
+      el.innerHTML = `<div><b>${esc(j.title || j.id)}</b><br><small>${j.status === "error" ? esc(j.error || "Failed")
+        : `${j.kind === "audio" ? "Audio" : "Video"} · ${Math.round(j.progress * 100)}%${j.speed ? " · " + esc(j.speed.trim()) : ""}`}</small></div>
+        <span></span><div class="bar"><i style="width:${Math.round(j.progress * 100)}%"></i></div>`;
+      if (j.status === "error") el.children[1].replaceWith(button("Dismiss", "ghost", async () => {
+        await fetch(`/api/download-dismiss?id=${j.id}&kind=${j.kind}`, { method: "POST" }); el.remove(); }));
+      return el;
+    }));
+  };
+  renderItems(data.items);
+  renderJobs(data.jobs);
+  // poll while downloads are running and this page is open
+  let active = data.jobs.some(j => j.status !== "error");
+  while (active && jobsEl.isConnected) {
+    await new Promise(r => setTimeout(r, 1000));
+    const d = await fetch("/api/downloads").then(r => r.json()).catch(() => null);
+    if (!d || !jobsEl.isConnected) break;
+    renderJobs(d.jobs);
+    if (d.items.length !== grid.querySelectorAll(".dl-item").length) renderItems(d.items);
+    active = d.jobs.some(j => j.status !== "error");
+  }
+}
+
+// ---------- music ----------
+// The queue is M.queue with M.i the current song; "radio" appends YouTube Music's mix for the last song when it runs low.
+const M = { el: 0, fading: 0, queue: [], i: -1, shuffle: false, order: null, repeat: "off", radioFor: null, lyrics: null, lyIdx: -1, seeking: false };
+// two audio elements so one song can fade into the next (crossfade); ma() is the one currently playing
+const ma = () => $(M.el ? "#ma2" : "#ma");
+const musicEls = () => [$("#ma"), $("#ma2")];
+const pauseMusic = () => musicEls().forEach(a => a.pause());
+const song = () => M.queue[M.i];
+const ymUrl = s => `https://music.youtube.com/watch?v=${s.id}`;
+// Square cover art: YouTube's 16:9 thumbnails show the album cover centered, so a square crop is the cover.
+// (hqdefault is 4:3 with letterbox bars.) hq720 is sharper but missing on some songs.
+const art = (id, big) => thumb(id, big ? "hq720" : "mqdefault");
+const artImg = (id, big, attrs = "") => `<img ${attrs} src="${art(id, big)}" alt="" onerror="this.onerror=null;this.src='${art(id)}'">`;
+
+function songCard(s, list) {
+  const b = document.createElement("button");
+  b.className = "scard" + (song()?.id === s.id ? " playing" : "");
+  b.dataset.song = s.id;
+  b.innerHTML = `<div class="art">${artImg(s.id, true, 'loading="lazy"')}</div><div class="t">${esc(s.title)}</div><div class="c">${esc(s.artist)}</div>`;
+  b.onclick = () => playSongs(list, list.indexOf(s));
+  b._song = s; b._list = list;
+  return b;
+}
+
+function trackRow(s, list, n) {
+  const b = document.createElement("button");
+  b.className = "track" + (song()?.id === s.id ? " playing" : "");
+  b.dataset.song = s.id;
+  b.innerHTML = `<span class="n">${n}</span>${artImg(s.id, false, 'loading="lazy"')}<div style="min-width:0"><div class="t">${esc(s.title)}</div>
+    <div class="c">${esc(s.artist)}</div></div><span class="al">${esc(s.album || "")}</span><span class="d">${fmtDur(s.duration)}</span>`;
+  b.onclick = () => playSongs(list, list.indexOf(s));
+  b._song = s; b._list = list;
+  return b;
+}
+
+function songRow(title, load, actions) {
+  const el = row(title), h = el.previousElementSibling;
+  el.classList.add("songs");
+  el.innerHTML = '<div class="scard"><div class="art"></div></div>'.repeat(7);
+  load().then(list => {
+    if (!el.isConnected) return;
+    if (!list.length) return el.parentElement.remove();
+    el.replaceChildren(...list.map(s => songCard(s, list)));
+    if (actions) {
+      h.className = "head";
+      h.innerHTML = `<span>${esc(title)}</span>`;
+      h.append(...actions(list).map(b => (b.classList.add("more"), b)));
+    }
+  }).catch(() => el.parentElement.remove());
+  return el;
+}
+
+const MUSIC_TABS = [["foryou", "For You"], ["liked", "Liked Songs"], ["playlists", "Playlists"], ["recent", "Recently Played"]];
+
+async function musicPage(q, tab) {
+  noHero();
+  pageHead("Music", "Songs from YouTube Music. Picks keep playing similar songs when your queue runs out.");
+  const form = Object.assign(document.createElement("form"), { className: "msearch" });
+  form.innerHTML = `<input name="q" placeholder="Search songs and artists" aria-label="Search songs" autocomplete="off" value="${esc(q || "")}">`;
+  form.onsubmit = e => { e.preventDefault(); form.q.value.trim() && go("music", form.q.value.trim()); };
+  $("#main").append(form);
+  if (q) {
+    const list = Object.assign(document.createElement("div"), { className: "tracks" });
+    list.innerHTML = '<p class="empty" style="padding:0">Searching…</p>';
+    $("#main").append(list);
+    try {
+      const res = await api("/api/msearch?q=" + encodeURIComponent(q));
+      if (!list.isConnected) return;
+      list.replaceChildren(...res.map((s, i) => trackRow(s, res, i + 1)));
+      if (!res.length) list.innerHTML = '<p class="empty" style="padding:0">No songs found.</p>';
+    } catch (e) { fail(list, e); }
+    return;
+  }
+  tab = MUSIC_TABS.some(t => t[0] === tab) ? tab : pref("musicTab", "foryou");
+  setPref("musicTab", tab);
+  const tabs = Object.assign(document.createElement("div"), { className: "tabs" });
+  tabs.innerHTML = MUSIC_TABS.map(([t, label]) => `<button class="${t === tab ? "on" : ""}" data-t="${t}">${label}</button>`).join("");
+  tabs.onclick = e => e.target.dataset.t && go("music", "", e.target.dataset.t);
+  $("#main").append(tabs);
+  const recent = store.get("musicHistory");
+  const playAll = (shuffle) => list => [button(shuffle ? "Shuffle" : "▶ Play all", "ghost", () => playSongs(shuffle ? shuffled(list) : list, 0))];
+  const both = list => [...playAll(false)(list), ...playAll(true)(list)];
+  const trackList = async (load, none) => {
+    const list = Object.assign(document.createElement("div"), { className: "tracks" });
+    list.innerHTML = '<p class="empty" style="padding:0">Loading…</p>';
+    $("#main").append(list);
+    try {
+      const res = await load();
+      if (!list.isConnected) return;
+      const actions = Object.assign(document.createElement("div"), { className: "actions" });
+      actions.append(...both(res));
+      list.replaceChildren(...(res.length ? [actions, ...res.map((s, i) => trackRow(s, res, i + 1))] : []));
+      if (!res.length) list.innerHTML = `<p class="empty" style="padding:0">${none}</p>`;
+    } catch (e) { fail(list, e); }
+  };
+  if (tab === "liked") {
+    if (!account()) return $("#main").append(Object.assign(document.createElement("p"), { className: "empty", textContent: "Sign in to see the songs you've liked on YouTube." }));
+    return trackList(() => api("/api/liked-music"), "No liked songs yet.");
+  }
+  if (tab === "recent") return trackList(async () => recent, "Songs you play show up here.");
+  if (tab === "playlists") {
+    const songLists = myLists().filter(pl => pl.items.some(x => x.kind === "song"));
+    fillWith(row("Your Playlists", "grid"), songLists, listCard, "No playlists with songs yet. Right-click a song (or long-press it) and choose “Add to playlist”.");
+    if (account()) {
+      const pls = row("Your YouTube Playlists", "grid");
+      api("/api/playlists").then(list => pls.isConnected && fillWith(pls, list, plCard, "No playlists yet.")).catch(e => fail(pls, e));
+    }
+    return;
+  }
+  // For You: picks from what you play (YouTube Music radios of it), then the rows everyone gets
+  if (recent.length || me.ytv) {
+    const mix = songRow("Mixed for You", async () => (await api("/api/music-foryou")).mix, both);
+    api("/api/music-foryou").then(r => {
+      let after = mix.parentElement;
+      const add = (title, list) => {
+        if (!after?.isConnected || !list.length) return;
+        const el = songRow(title, async () => list, playAll(false));
+        after.after(el.parentElement);
+        after = el.parentElement;
+      };
+      r.because.forEach(b => add(`Because You Played ${b.seed.title}`, b.songs));
+      r.artists.forEach(a => add(`More from ${a.name}`, a.songs));
+    }).catch(() => {});
+  }
+  if (recent.length) songRow("Recently Played", async () => recent.slice(0, 20));
+  // the server owns the row list (it prefetches them)
+  const rows = await api("/api/music-rows").catch(() => []);
+  for (const [title, query] of rows) songRow(title, () => api("/api/msearch?q=" + encodeURIComponent(query)), playAll(false));
+}
+
+function playSongs(list, i = 0) {
+  M.queue = [...list];
+  M.order = null;
+  M.radioFor = null;
+  if (M.shuffle) { M.order = [...M.queue]; M.queue = [M.queue[i], ...shuffled(M.queue.filter((_, k) => k !== i))]; i = 0; }
+  startSong(i);
+}
+
+function startSong(i, fade = 0) {
+  if (!M.queue[i]) return;
+  if (!$("#player").hidden) closePlayer();  // one thing plays at a time
+  M.i = i;
+  const s = song(), old = ma();
+  clearInterval(M.fading); M.fading = 0;
+  if (fade) M.el = 1 - M.el; else musicEls().forEach(x => x !== old && x.pause());
+  const a = ma(), vol = pref("musicVolume", 1);
+  a.src = `/api/audio?id=${s.id}${WEB}`;
+  a.volume = fade ? 0 : vol;
+  musicGraph();
+  a.play().catch(() => {});
+  if (fade) {
+    // fade the old song out and the new one in over `fade` seconds
+    const t0 = Date.now(), from = old.volume;
+    M.fading = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / (fade * 1000));
+      a.volume = vol * k; old.volume = from * (1 - k);
+      if (k === 1) { clearInterval(M.fading); M.fading = 0; old.pause(); old.volume = vol; }
+    }, 50);
+  }
+  store.set("musicHistory", [s, ...store.get("musicHistory").filter(x => x.id !== s.id)].slice(0, 50));
+  M.lyrics = null; M.lyIdx = -1;
+  renderMusic(); renderQueue(); loadLyrics(s); mediaSession(s);
+  if (pref("radio", true) && M.i >= M.queue.length - 3) extendRadio();
+}
+
+async function extendRadio() {
+  const seed = M.queue.at(-1);
+  if (!seed || M.radioFor === seed.id) return;
+  M.radioFor = seed.id;
+  const more = await api("/api/radio?id=" + seed.id).catch(() => []);
+  const have = new Set(M.queue.map(s => s.id)), add = more.filter(s => !have.has(s.id));
+  M.queue.push(...add);
+  M.order?.push(...add);
+  renderQueue();
+}
+
+// start the next song early, overlapping, when crossfade is on
+function crossfadeCheck(a) {
+  const cf = pref("crossfade", 0), left = a.duration - a.currentTime;
+  if (!cf || M.fading || !isFinite(left) || left > cf || a.duration < cf * 3 || M.repeat === "one" || SLEEP.end) return;
+  const next = M.i + 1 < M.queue.length ? M.i + 1 : M.repeat === "all" ? 0 : -1;
+  if (next >= 0) startSong(next, cf);
+}
+
+function nextSong(auto) {
+  if (auto && M.repeat === "one") { ma().currentTime = 0; return ma().play(); }
+  if (M.i + 1 < M.queue.length) return startSong(M.i + 1);
+  if (M.repeat === "all" && M.queue.length) return startSong(0);
+  if (pref("radio", true)) extendRadio().then(() => M.i + 1 < M.queue.length && startSong(M.i + 1));
+}
+const prevSong = () => ma().currentTime > 3 || M.i <= 0 ? (ma().currentTime = 0) : startSong(M.i - 1);
+const toggleMusic = () => ma().paused ? ma().play().catch(() => {}) : ma().pause();
+
+function toggleShuffle() {
+  M.shuffle = !M.shuffle;
+  const cur = song();
+  if (M.shuffle) { M.order = [...M.queue]; M.queue = [...M.queue.slice(0, M.i + 1), ...shuffled(M.queue.slice(M.i + 1))]; }
+  else if (M.order) { M.queue = M.order; M.order = null; M.i = Math.max(0, M.queue.findIndex(s => s.id === cur?.id)); }
+  renderMusic(); renderQueue();
+}
+function cycleRepeat() { M.repeat = { off: "all", all: "one", one: "off" }[M.repeat]; renderMusic(); }
+
+function queueSong(s, next) {
+  if (!song()) return playSongs([s]);
+  M.queue = M.queue.filter((x, k) => x.id !== s.id || k === M.i);
+  M.queue.splice(next ? M.i + 1 : M.queue.length, 0, s);
+  renderQueue();
+  toast(next ? "Playing next" : "Added to queue");
+}
+function startRadio(s) { playSongs([s]); M.radioFor = null; extendRadio(); toast(`Radio: ${s.title}`); }
+
+function stopMusic() {
+  clearInterval(M.fading); M.fading = 0;
+  musicEls().forEach(a => { a.pause(); a.removeAttribute("src"); a.load(); });
+  M.queue = []; M.i = -1;
+  $("#mfull").hidden = true;
+  renderMusic();
+}
+
+function renderMusic() {
+  androidMusic();
+  const s = song(), a = ma(), on = !!s;
+  $("#mbar").hidden = !on;
+  document.body.classList.toggle("has-mbar", on);
+  document.querySelectorAll("[data-song]").forEach(el => el.classList.toggle("playing", el.dataset.song === s?.id));
+  if (!on) return;
+  const icon = (el, n) => el.dataset.icon !== n && (el.dataset.icon = n, el.innerHTML = svg(n));
+  for (const p of ["mb", "mf"]) {
+    icon($(`#${p}-play`), a.paused ? "play" : "pause");
+    $(`#${p}-shuffle`).classList.toggle("on", M.shuffle);
+    $(`#${p}-repeat`).classList.toggle("on", M.repeat !== "off");
+    $(`#${p}-repeat`).innerHTML = svg("repeat") + (M.repeat === "one" ? "<small>1</small>" : "");
+  }
+  icon($("#mb-mute"), a.muted || !a.volume ? "mute" : "vol");
+  if ($("#mb-title").textContent !== s.title || $("#mb-art").dataset.id !== s.id) {
+    $("#mb-art").src = art(s.id);
+    $("#mb-art").dataset.id = s.id;
+    $("#mf-art").onerror = () => { $("#mf-art").onerror = null; $("#mf-art").src = art(s.id); };
+    $("#mf-art").src = art(s.id, true);
+    $("#mb-title").textContent = $("#mf-title").textContent = s.title;
+    $("#mb-artist").textContent = $("#mf-artist").textContent = s.artist + (s.album ? " · " + s.album : "");
+    $("#mfull").style.backgroundImage = `url(${art(s.id)})`;
+  }
+  renderTime();
+}
+
+function renderTime() {
+  androidMusic();
+  const a = ma(), d = isFinite(a.duration) ? a.duration : song()?.duration || 0;
+  if (!M.seeking) for (const id of ["#mb-seek", "#mf-seek"]) { $(id).max = d || 1; $(id).value = a.currentTime; }
+  $("#mb-time").textContent = `${fmtT(a.currentTime)} / ${fmtT(d)}`;
+  $("#mf-t").textContent = fmtT(a.currentTime);
+  $("#mf-d").textContent = fmtT(d);
+}
+
+function renderQueue() {
+  const pane = $("#mf-queue");
+  if ($("#mfull").hidden) return;
+  pane.replaceChildren(...M.queue.map((s, k) => {
+    const r = trackRow(s, M.queue, k === M.i ? "♪" : k + 1);
+    r.onclick = e => { if (!e.target.closest(".x")) startSong(k); };
+    r.querySelector(".al").remove();
+    if (k !== M.i) r.insertAdjacentHTML("beforeend", '<button class="x" aria-label="Remove from queue">✕</button>');
+    r.querySelector(".x")?.addEventListener("click", () => { M.queue.splice(k, 1); if (k < M.i) M.i--; renderQueue(); });
+    return r;
+  }));
+  pane.querySelector(".playing")?.scrollIntoView({ block: "nearest" });
+}
+
+async function loadLyrics(s) {
+  const pane = $("#mf-lyrics");
+  pane.innerHTML = '<p class="empty" style="padding:30vh 0 0">Looking for lyrics…</p>';
+  const q = new URLSearchParams({ track: s.title, artist: s.artist, album: s.album || "", duration: s.duration || "" });
+  const r = await fetch("/api/lyrics?" + q).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (song() !== s) return;
+  const credit = r?.source ? `<p class="ly-src">Lyrics from ${esc(r.source)}</p>` : "";
+  if (r?.synced) {
+    // lines: {t, e: start and end in ms, text, w: [[start, end, word], ...] when timed word by word}
+    M.lyrics = r.lines.filter(l => l.t >= 0).map(l => ({ t: l.t / 1000, text: l.text || "♪", w: l.w }));
+    pane.innerHTML = `<div class="ly${r.words ? " words" : ""}">${M.lyrics.map((l, k) =>
+      `<p data-k="${k}">${l.w ? l.w.map(w => `<span>${esc(w[2])}</span>`).join("") : esc(l.text)}</p>`).join("")}</div>${credit}`;
+    pane.querySelectorAll(".ly p").forEach(p => p.onclick = () => { ma().currentTime = M.lyrics[p.dataset.k].t; });
+    wordFrame();
+  } else if (r?.plain) {
+    pane.innerHTML = `<div class="ly plain"><p>${esc(r.plain)}</p></div>${credit}`;
+  } else {
+    pane.innerHTML = `<p class="empty" style="padding:30vh 0 0">${r?.instrumental ? "Instrumental" : "No lyrics found for this song."}</p>`;
+  }
+}
+
+function tickLyrics() {
+  if (!M.lyrics) return;
+  const t = ma().currentTime + 0.25;
+  let k = M.lyrics.findIndex(l => l.t > t) - 1;
+  if (k === -2) k = M.lyrics.length - 1;
+  wordFrame();
+  if (k === M.lyIdx) return;
+  M.lyIdx = k;
+  const pane = $("#mf-lyrics");
+  pane.querySelectorAll("p.on").forEach(p => p.classList.remove("on"));
+  const p = pane.querySelector(`p[data-k="${k}"]`);
+  p?.classList.add("on");
+  if (p && !pane.hidden && !$("#mfull").hidden) {
+    // center the line in the lyrics pane (scrollIntoView would also try to scroll the page behind it)
+    const top = pane.scrollTop + p.getBoundingClientRect().top - pane.getBoundingClientRect().top - pane.clientHeight / 2 + p.offsetHeight / 2;
+    pane.scrollTo({ top, behavior: Math.abs(top - pane.scrollTop) > innerHeight ? "auto" : "smooth" });
+  }
+}
+
+// fills in the sung line's words; every frame while the lyrics are on screen (a few times a second on Android)
+function wordFrame() {
+  if (M.wordRaf) return;
+  const step = () => {
+    M.wordRaf = 0;
+    const pane = $("#mf-lyrics"), l = M.lyrics?.[M.lyIdx];
+    if (!M.lyrics?.some(x => x.w) || pane.hidden || $("#mfull").hidden) return;
+    if (l?.w) {
+      const t = ma().currentTime * 1000 + 100, spans = pane.querySelector(`p[data-k="${M.lyIdx}"]`)?.children || [];
+      l.w.forEach(([s, e], i) => spans[i]?.style.setProperty("--p", t <= s ? 0 : t >= e ? 1 : ((t - s) / (e - s)).toFixed(3)));
+    }
+    if (!ma().paused) M.wordRaf = ANDROID ? setTimeout(step, 80) : requestAnimationFrame(step);
+  };
+  step();
+}
+
+function openMusic(tab) {
+  $("#mfull").hidden = false;
+  if (tab) showMusicTab(tab);
+  renderQueue();
+  M.lyIdx = -1; tickLyrics();
+}
+function showMusicTab(t) {
+  $("#mf-tabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  $("#mf-queue").hidden = t !== "queue";
+  $("#mf-lyrics").hidden = t !== "lyrics";
+  $("#mfull").classList.toggle("lyr", t === "lyrics");
+  if (t === "lyrics") { M.lyIdx = -1; tickLyrics(); }
+}
+
+// OS media keys and the KDE media controls
+function mediaSession(s) {
+  if (!navigator.mediaSession) return;
+  navigator.mediaSession.metadata = new MediaMetadata({ title: s.title, artist: s.artist, album: s.album || "",
+    artwork: [{ src: art(s.id, true), sizes: "1280x720", type: "image/jpeg" }] });
+}
+
+// ---------- equalizer + volume levelling (Web Audio), only wired in once you use them ----------
+const AX = { ctx: null };
+const EQ_FREQS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const EQ_PRESETS = {
+  "Flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "Bass boost": [6, 5, 4, 2, 0, 0, 0, 0, 0, 0],
+  "Treble boost": [0, 0, 0, 0, 0, 1, 2, 4, 5, 6], "Vocal": [-2, -2, -1, 1, 3, 4, 3, 1, 0, -1],
+  "Rock": [4, 3, 2, 0, -1, -1, 1, 2, 3, 4], "Electronic": [5, 4, 1, 0, -2, 1, 0, 1, 4, 5],
+  "Hip-hop": [5, 4, 2, 1, -1, -1, 1, 0, 2, 3], "Late night": [-3, -2, 0, 1, 2, 2, 1, 0, -2, -3],
+};
+const eqGains = () => pref("eq", EQ_PRESETS.Flat);
+function musicGraph() {
+  const wanted = pref("level", false) || eqGains().some(g => g);
+  if (!AX.ctx && wanted && window.AudioContext) {
+    const ctx = AX.ctx = new AudioContext();
+    AX.eq = EQ_FREQS.map((f, i) => {
+      const b = ctx.createBiquadFilter();
+      b.type = i === 0 ? "lowshelf" : i === EQ_FREQS.length - 1 ? "highshelf" : "peaking";
+      b.frequency.value = f; b.Q.value = 1.1;
+      return b;
+    });
+    AX.eq.reduce((a, b) => (a.connect(b), b));
+    // levelling: a gentle compressor evens out loud and quiet songs, then make-up gain
+    AX.comp = ctx.createDynamicsCompressor();
+    Object.entries({ threshold: -24, knee: 30, ratio: 4, attack: 0.003, release: 0.25 }).forEach(([k, v]) => AX.comp[k].value = v);
+    AX.makeup = ctx.createGain(); AX.makeup.gain.value = 1.6;
+    AX.comp.connect(AX.makeup).connect(ctx.destination);
+    // once routed through Web Audio, an element only plays through this graph
+    for (const el of musicEls()) ctx.createMediaElementSource(el).connect(AX.eq[0]);
+  }
+  if (!AX.ctx) return;
+  AX.ctx.resume();
+  eqGains().forEach((g, i) => AX.eq[i].gain.value = g);
+  const last = AX.eq.at(-1);
+  last.disconnect();
+  last.connect(pref("level", false) ? AX.comp : AX.ctx.destination);
+}
+
+function initMusic() {
+  $("#mb-prev").innerHTML = $("#mf-prev").innerHTML = svg("prev");
+  $("#mb-next").innerHTML = $("#mf-next").innerHTML = svg("next");
+  $("#mb-shuffle").innerHTML = $("#mf-shuffle").innerHTML = svg("shuffle");
+  $("#mb-queue").innerHTML = svg("queue");
+  $("#mb-lyrics").innerHTML = svg("lyrics");
+  $("#mb-close").innerHTML = svg("close");
+  $("#mf-close").innerHTML = svg("down");
+  $("#mb-vol").value = pref("musicVolume", 1);
+  for (const p of ["mb", "mf"]) {
+    $(`#${p}-play`).onclick = toggleMusic;
+    $(`#${p}-prev`).onclick = prevSong;
+    $(`#${p}-next`).onclick = () => nextSong(false);
+    $(`#${p}-shuffle`).onclick = toggleShuffle;
+    $(`#${p}-repeat`).onclick = cycleRepeat;
+    const seek = $(`#${p}-seek`);
+    seek.oninput = () => { M.seeking = true; $("#mf-t").textContent = fmtT(+seek.value); };
+    seek.onchange = () => { ma().currentTime = +seek.value; M.seeking = false; };
+  }
+  $("#mb-now").onclick = () => openMusic();
+  $("#mb-queue").onclick = () => openMusic("queue");
+  $("#mb-lyrics").onclick = () => openMusic("lyrics");
+  $("#mb-close").onclick = stopMusic;
+  $("#mb-sleep").onclick = $("#p-sleep").onclick = e => { const r = e.target.getBoundingClientRect(); MENU.x = r.left; MENU.y = r.top - 260; sleepMenu(); };
+  $("#mf-close").onclick = () => { $("#mfull").hidden = true; };
+  $("#mf-tabs").onclick = e => e.target.dataset.t && showMusicTab(e.target.dataset.t);
+  $("#mb-mute").onclick = () => musicEls().forEach(a => a.muted = !ma().muted);
+  $("#mb-vol").oninput = e => { musicEls().forEach(a => { a.volume = +e.target.value; a.muted = false; }); setPref("musicVolume", +e.target.value); };
+  for (const a of musicEls()) {
+    // events from the element that's fading out don't count
+    const mine = fn => e => { if (a === ma()) fn(e); };
+    for (const ev of ["play", "pause", "volumechange"]) a.addEventListener(ev, mine(renderMusic));
+    a.addEventListener("timeupdate", mine(() => { renderTime(); tickLyrics(); crossfadeCheck(a); }));
+    a.addEventListener("ended", mine(() => sleepAtEnd() || nextSong(true)));
+    a.addEventListener("error", mine(() => { if (a.getAttribute("src")) { toast("Couldn't play that song, skipping"); setTimeout(() => nextSong(false), 800); } }));
+  }
+  if (navigator.mediaSession) {
+    const ms = navigator.mediaSession;
+    ms.setActionHandler("play", () => ma().play());
+    ms.setActionHandler("pause", () => ma().pause());
+    ms.setActionHandler("previoustrack", prevSong);
+    ms.setActionHandler("nexttrack", () => nextSong(false));
+    try { ms.setActionHandler("seekto", d => { ma().currentTime = d.seekTime; }); } catch {}
+  }
+}
+
+// ---------- context menu ----------
+const ytUrl = (v, t) => `https://www.youtube.com/watch?v=${v.id}${t >= 1 ? "&t=" + Math.floor(t) + "s" : ""}`;
+async function copy(text, what = "Link") {
+  try { await navigator.clipboard.writeText(text); }
+  catch {  // older engines / no clipboard permission
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  toast(`${what} copied`);
+}
+const openExternal = url => window.open(url, "_blank", "noopener");
+
+// ---------- sleep timer: pause everything after N minutes, or when the current video/song ends ----------
+const SLEEP = { until: 0, end: false, tick: 0 };
+function setSleep(min) {
+  clearInterval(SLEEP.tick);
+  Object.assign(SLEEP, { until: typeof min === "number" && min > 0 ? Date.now() + min * 60000 : 0, end: min === "end" });
+  if (SLEEP.until) SLEEP.tick = setInterval(() => { if (Date.now() >= SLEEP.until) sleepNow(); else renderSleep(); }, 1000);
+  renderSleep();
+  toast(SLEEP.until ? `Sleep timer: ${min} min` : SLEEP.end ? "Sleep timer: at the end of this one" : "Sleep timer off");
+}
+function sleepNow() {
+  pv().pause(); pauseMusic();
+  setSleep(0);
+  toast("Sleep timer: paused");
+}
+function renderSleep() {
+  const on = SLEEP.until || SLEEP.end;
+  const label = SLEEP.until ? `⏾ ${Math.ceil((SLEEP.until - Date.now()) / 60000)}m` : SLEEP.end ? "⏾ end" : "";
+  for (const id of ["#mb-sleep", "#p-sleep"]) { $(id).hidden = !on; $(id).textContent = label; }
+}
+// returns true if the sleep timer took this "ended"
+const sleepAtEnd = () => SLEEP.end && (sleepNow(), true);
+const sleepMenu = () => showMenu(MENU.x, MENU.y, "Sleep timer", [
+  ...[15, 30, 45, 60, 90].map(m => [`${m} minutes`, () => setSleep(m)]),
+  ["At the end of this video / song", () => setSleep("end")],
+  ...(SLEEP.until || SLEEP.end ? ["-", ["Turn off", () => setSleep(0), "", true]] : []),
+]);
+
+// "Play next" / "Add to queue": edit the list autoplay walks through (P.queue)
+function enqueue(v, next) {
+  if (!P.v) return watch(v, [v]);
+  const q = P.queue.filter(x => x.id !== v.id), i = q.findIndex(x => x.id === P.v.id);
+  if (i < 0) q.unshift(P.v);
+  q.splice(next ? Math.max(0, q.findIndex(x => x.id === P.v.id)) + 1 : q.length, 0, v);
+  P.queue = q;
+  render();
+  toast(next ? "Playing next" : "Added to queue");
+}
+
+function forget(v, el) {
+  store.set("history", store.get("history").filter(h => h.id !== v.id));
+  saveProgress(v.id, null);
+  if (el.closest(".row")?.querySelector("h2")?.textContent.startsWith("Continue")) el.remove();
+  toast("Removed from Continue Watching");
+}
+
+// items: [label, action, shortcut?, danger?] | "-" (separator)
+function videoMenu(v, list, el) {
+  const pr = progress()[v.id], inHistory = store.get("history").some(h => h.id === v.id);
+  return [
+    ["▶ Play", () => watch(v, list)],
+    ...(pr?.t > 10 ? [["Play from the beginning", () => { saveProgress(v.id, null); watch(v, list); }]] : []),
+    ["Play in mpv", () => playMpv(v)],
+    ["Play next", () => enqueue(v, true)],
+    ["Add to queue", () => enqueue(v, false)],
+    "-",
+    ["Details", () => openDetail(v, list)],
+    ...(v.channel_id ? [["Go to channel", () => go("channel", v.channel_id)]] : []),
+    "-",
+    ["⬇ Download video", () => download(v, "video")],
+    ["⬇ Download audio", () => download(v, "audio")],
+    "-",
+    ["Add to playlist…", () => playlistMenu(asItem(v, "video"))],
+    ...(me.ytv ? [["Save to YouTube playlist…", () => ytPlaylistMenu(v)]] : []),
+    ...(el._inList ? [["Remove from this playlist", () => removeFromList(el._inList, v.id), "", true]] : []),
+    "-",
+    ["Copy link", () => copy(ytUrl(v))],
+    ["Open on YouTube", () => openExternal(ytUrl(v))],
+    ...(inHistory || pr ? ["-", ["Remove from Continue Watching", () => forget(v, el), "", true]] : []),
+  ];
+}
+
+function playerMenu() {
+  const v = pv(), t = now(), mini = $("#player").classList.contains("mini") || $("#player").classList.contains("pip");
+  return [
+    [v.paused ? "▶ Play" : "❚❚ Pause", toggle, "Space"],
+    [P.loop ? "✓ Loop" : "Loop", () => { P.loop = !P.loop; toast(P.loop ? "Loop on" : "Loop off"); }],
+    ...(nextUp() ? [["Next video", playNext, "Shift+N"]] : []),
+    "-",
+    ...(P.captions.length ? [[P.cc ? "✓ Subtitles" : "Subtitles", () => setCC(P.cc ? null : P.captions.find(c => !c.auto) || P.captions[0]), "C"]] : []),
+    [mini ? "Expand player" : "Mini player", () => mini ? ($("#player").classList.contains("pip") ? setAppPip(false) : expandPlayer()) : minimizePlayer(), "I"],
+    ...(IN_APP || document.pictureInPictureEnabled ? [["Picture in picture", togglePip, "P"]] : []),
+    ["Fullscreen", fullscreen, "F"],
+    "-",
+    ["Add to playlist…", () => playlistMenu(asItem(P.v, "video"))],
+    [SLEEP.until || SLEEP.end ? "✓ Sleep timer…" : "Sleep timer…", sleepMenu],
+    "-",
+    ["Copy link", () => copy(ytUrl(P.v))],
+    ...(!P.live ? [[`Copy link at ${fmtT(t)}`, () => copy(ytUrl(P.v, t))]] : []),
+    ["Continue in mpv", () => { const cur = P.v; closePlayer(); playMpv(cur, P.live ? 0 : t); }],
+    ["⬇ Download", () => download(P.v, P.q === 0 ? "audio" : "video")],
+    "-",
+    ["Close player", closePlayer, "Esc", true],
+  ];
+}
+
+function pageMenu() {
+  return [
+    ["Home", () => go("home")],
+    ...(me.signed_in ? [["Subscriptions", () => go("subscriptions")], ["Library", () => go("library")]] : []),
+    ["Downloads", () => go("downloads")],
+    "-",
+    ["Search", () => $(".search input").focus(), "/"],
+    ["Reload", () => location.reload(), "F5"],
+    ["Settings", () => go("settings")],
+    "-",
+    [SLEEP.until || SLEEP.end ? "✓ Sleep timer…" : "Sleep timer…", sleepMenu],
+  ];
+}
+
+const MENU = { x: 0, y: 0 };  // where the last menu opened, for submenus
+
+function showMenu(x, y, title, items) {
+  Object.assign(MENU, { x, y });
+  const m = $("#ctx");
+  m.innerHTML = title ? `<div class="ttl">${esc(title)}</div>` : "";
+  for (const it of items) {
+    if (it === "-") { if (m.lastElementChild?.tagName === "BUTTON") m.append(document.createElement("hr")); continue; }
+    const [label, act, keys, danger] = it;
+    const b = Object.assign(document.createElement("button"), { className: danger ? "danger" : "" });
+    b.setAttribute("role", "menuitem");
+    b.innerHTML = `<span>${esc(label)}</span>${keys ? `<kbd>${esc(keys)}</kbd>` : ""}`;
+    b.onclick = () => { hideMenu(); act(); };
+    m.append(b);
+  }
+  if (m.lastElementChild?.tagName === "HR") m.lastElementChild.remove();
+  m.hidden = false;
+  // keep it on screen
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + "px";
+  m.querySelector("button")?.focus({ preventScroll: true });
+}
+const hideMenu = () => { $("#ctx").hidden = true; };
+
+addEventListener("contextmenu", e => {
+  // keep the normal menu for text fields and selected text (copy / paste)
+  if (e.target.closest("input, textarea, select") || String(getSelection())) return;
+  e.preventDefault();
+  const card = e.target.closest(".card, .chan");
+  if (e.target.closest("#mbar, #mfull") && song() && !e.target.closest(".track")) {
+    const sg = song();
+    return showMenu(e.clientX, e.clientY, `${sg.title} · ${sg.artist}`, [
+      [ma().paused ? "▶ Play" : "❚❚ Pause", toggleMusic, "Space"], ["Next", () => nextSong(false)], ["Previous", prevSong], "-",
+      [M.shuffle ? "✓ Shuffle" : "Shuffle", toggleShuffle], [`Repeat: ${M.repeat}`, cycleRepeat], ["Start radio from this song", () => startRadio(sg)], "-",
+      ["Lyrics", () => openMusic("lyrics")], ["Queue", () => openMusic("queue")],
+      ["Add to playlist…", () => playlistMenu(asItem(sg, "song"))], [SLEEP.until || SLEEP.end ? "✓ Sleep timer…" : "Sleep timer…", sleepMenu], "-",
+      ["Copy link", () => copy(ymUrl(sg))], ["⬇ Download audio", () => download(sg, "audio")], "-", ["Stop music", stopMusic, "", true]]);
+  }
+  if (e.target.closest("#player") && P.v) return showMenu(e.clientX, e.clientY, shownTitle(P.v), playerMenu());
+  if (card?._v) return showMenu(e.clientX, e.clientY, shownTitle(card._v), videoMenu(card._v, card._list, card));
+  const track = e.target.closest(".scard, .track");
+  if (track?._song) {
+    const sg = track._song;
+    return showMenu(e.clientX, e.clientY, `${sg.title} · ${sg.artist}`, [
+      ["▶ Play", () => playSongs(track._list, track._list.indexOf(sg))], ["Play next", () => queueSong(sg, true)],
+      ["Add to queue", () => queueSong(sg, false)], ["Start radio", () => startRadio(sg)], "-",
+      ...(sg.channel_id ? [["Go to artist", () => { $("#mfull").hidden = true; go("channel", sg.channel_id); }]] : []),
+      ["Watch the video", () => { pauseMusic(); watch({ ...sg, channel: sg.artist }, [sg]); }],
+      ["⬇ Download audio", () => download(sg, "audio")], ["Add to playlist…", () => playlistMenu(asItem(sg, "song"))],
+      ...(track._inList ? [["Remove from this playlist", () => removeFromList(track._inList, sg.id), "", true]] : []), "-",
+      ["Copy link", () => copy(ymUrl(sg))], ["Open on YouTube Music", () => openExternal(ymUrl(sg))]]);
+  }
+  if (card?._c) {
+    const url = `https://www.youtube.com/channel/${card._c.id}`;
+    return showMenu(e.clientX, e.clientY, card._c.name, [["Open channel", () => go("channel", card._c.id)],
+      ["Playlists", () => go("channel", card._c.id, "playlists")], "-", ["Copy link", () => copy(url)], ["Open on YouTube", () => openExternal(url)]]);
+  }
+  if (card?._pl?.local) {
+    const pl = myLists().find(l => l.id === card._pl.id);
+    if (pl) return showMenu(e.clientX, e.clientY, pl.name, [["Open playlist", () => go("myplaylist", pl.id)], ["▶ Play all", () => playList(pl)],
+      ["Shuffle", () => playList(pl, true)], "-", ["Delete playlist", () => { if (confirm(`Delete “${pl.name}”?`)) { saveLists(myLists().filter(l => l.id !== pl.id)); go($("#main").dataset.page === "music" ? "music" : "library"); } }, "", true]]);
+  }
+  if (card?._pl) {
+    const pl = card._pl, url = `https://www.youtube.com/playlist?list=${pl.id}`;
+    const playAll = shuffle => api("/api/playlist?id=" + pl.id).then(r => { const vs = shuffle ? shuffled(r.videos) : r.videos; vs[0] && watch(vs[0], vs); })
+      .catch(() => toast("Couldn't load the playlist"));
+    return showMenu(e.clientX, e.clientY, pl.title, [["Open playlist", () => go("playlist", pl.id)], ["▶ Play all", () => playAll(false)],
+      ["Shuffle", () => playAll(true)], "-", ["Copy link", () => copy(url)], ["Open on YouTube", () => openExternal(url)]]);
+  }
+  showMenu(e.clientX, e.clientY, "", pageMenu());
+});
+addEventListener("pointerdown", e => { if (!e.target.closest("#ctx")) hideMenu(); }, true);
+addEventListener("scroll", hideMenu, true);
+addEventListener("resize", hideMenu);
+addEventListener("blur", hideMenu);
+$("#ctx").addEventListener("keydown", e => {
+  const items = [...$("#ctx").querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "Escape") { hideMenu(); e.stopPropagation(); }
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault(); e.stopPropagation();
+    items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+  }
+});
+
+// ---------- TV mode: arrow keys / game controller move focus between controls ----------
+// the side menu (TV mode): up/down walk it, right goes back to where you were on the page
+const menuItems = () => [...$("header").querySelectorAll("input, #nav button, .acct, .gear")]
+  .filter(e => e.offsetParent !== null).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+let lastSpot = null;
+function openMenu() {
+  const items = menuItems();
+  (items.find(e => e.classList.contains("on")) || items[0])?.focus();
+}
+// TV: moving onto a text box doesn't pop up the keyboard; OK (Enter) or a click starts typing
+(function tvTextBoxes() {
+  const TEXT = "input:is(:not([type]), [type=text], [type=search]), textarea";
+  let refocus = false;
+  // blur and focus again so Android notices the box is now editable and shows the keyboard
+  const unlock = t => { if (!t._tvLock) return; t._tvLock = t.readOnly = false; refocus = true; t.blur(); t.focus(); refocus = false; };
+  document.addEventListener("focusin", e => {
+    const t = e.target;
+    if (!refocus && pref("tv", TV_DEFAULT) && t.matches?.(TEXT) && !t.readOnly) t._tvLock = t.readOnly = true;
+  });
+  document.addEventListener("focusout", e => { if (!refocus && e.target._tvLock) e.target._tvLock = e.target.readOnly = false; });
+  document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target._tvLock) { e.preventDefault(); e.stopPropagation(); unlock(e.target); } }, true);
+  document.addEventListener("click", e => e.target._tvLock && unlock(e.target), true);
+})();
+
+function spatialMove(dir) {
+  const scope = $("#detail").classList.contains("open") ? $("#sheet") : !$("#mfull").hidden ? $("#mfull") : document;
+  const cur = document.activeElement;
+  const sideMenu = scope === document && pref("tv", TV_DEFAULT);
+  if (sideMenu && $("header").contains(cur)) {
+    if (dir === "ArrowLeft") return;
+    if (dir === "ArrowRight") {
+      if (lastSpot?.isConnected && lastSpot.offsetParent !== null) return moveTo(lastSpot);
+      // the first card, else the first control on the page (Settings has no cards; a hidden hero keeps its old buttons)
+      const shown = [...document.querySelectorAll("#hero button, #main :is(button, a[href], input, select)")]
+        .filter(e => e.offsetParent !== null && !e.disabled && !e.closest("[hidden]"));
+      return (shown.find(e => e.classList.contains("card")) || shown[0])?.focus();
+    }
+    const items = menuItems(), i = items.indexOf(cur);
+    return items[i + (dir === "ArrowDown" ? 1 : -1)]?.focus();
+  }
+  // along a rail: the next card over, without measuring the whole page
+  const side = dir === "ArrowRight" ? cur.nextElementSibling : dir === "ArrowLeft" ? cur.previousElementSibling : null;
+  if (side?.classList.contains("card") && cur.parentElement?.classList.contains("rail") && scope.contains(cur)) return moveTo(side);
+  const els = [...scope.querySelectorAll("button, a[href], input, select")].filter(e =>
+    e.offsetParent !== null && !e.disabled && !e.closest("[hidden], #player"));
+  if (!els.includes(cur)) return (els.find(e => e.classList.contains("card")) || els.find(e => !$("header").contains(e)) || els[0])?.focus();
+  const r = cur.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const e of els) {
+    if (e === cur) continue;
+    const q = e.getBoundingClientRect(), dx = q.left + q.width / 2 - cx, dy = q.top + q.height / 2 - cy;
+    const along = { ArrowRight: dx, ArrowLeft: -dx, ArrowDown: dy, ArrowUp: -dy }[dir];
+    const across = dir === "ArrowLeft" || dir === "ArrowRight" ? Math.abs(dy) : Math.abs(dx);
+    if (along < 4) continue;
+    const score = along + across * 2.5;
+    if (score < bestScore) { bestScore = score; best = e; }
+  }
+  if (sideMenu && dir === "ArrowLeft" && (!best || $("header").contains(best))) { lastSpot = cur; return openMenu(); }
+  if (best) moveTo(best);
+}
+// a held D-pad repeats faster than smooth scrolling can keep up with on a TV
+const moveTo = el => { el.focus({ preventScroll: true }); el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: ANDROID ? "auto" : "smooth" }); };
+
+let padUsed = false;
+(function gamepad() {
+  // standard mapping: d-pad 12-15, A 0, B 1, Start 9, bumpers 4/5
+  const KEYS = { 12: "ArrowUp", 13: "ArrowDown", 14: "ArrowLeft", 15: "ArrowRight", 0: "Enter", 1: "Escape", 9: " ", 4: "j", 5: "l" };
+  let prev = [], raf = 0;
+  const press = key => {
+    const target = document.activeElement || document.body;
+    const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    // a synthetic Enter doesn't click buttons by itself
+    if (key === "Enter" && !ev.defaultPrevented && target.click && target !== document.body) target.click();
+  };
+  const poll = () => {
+    const pad = [...(navigator.getGamepads?.() || [])].find(Boolean);
+    if (!pad) { raf = 0; return; }
+    const down = pad.buttons.map(b => b.pressed);
+    // left stick acts as a d-pad
+    const [x, y] = pad.axes;
+    down[14] ||= x < -0.6; down[15] ||= x > 0.6; down[12] ||= y < -0.6; down[13] ||= y > 0.6;
+    down.forEach((d, i) => d && !prev[i] && KEYS[i] && press(KEYS[i]));
+    prev = down;
+    raf = requestAnimationFrame(poll);
+  };
+  addEventListener("gamepadconnected", () => { padUsed = true; toast("Controller connected"); if (!raf) poll(); });
+})();
+
+// ---------- SponsorBlock, DeArrow, Return YouTube Dislike ----------
+const SB = "https://sponsor.ajay.app/api";
+// [category, label, color (SponsorBlock's own), default mode]
+const SB_CATS = [
+  ["sponsor", "Sponsor", "#00d400", "skip"], ["selfpromo", "Unpaid / self promotion", "#ffff00", "skip"],
+  ["exclusive_access", "Exclusive access", "#008a5c", "bar"], ["interaction", "Interaction reminder (subscribe)", "#cc00ff", "skip"],
+  ["intro", "Intermission / intro", "#00ffff", "button"], ["outro", "Endcards / credits", "#0202ed", "button"],
+  ["preview", "Preview / recap", "#008fd6", "button"], ["hook", "Hook / greetings", "#395699", "bar"],
+  ["filler", "Filler tangent / jokes", "#7300ff", "bar"], ["music_offtopic", "Non-music part of music videos", "#ff9900", "skip"],
+  ["poi_highlight", "Highlight", "#ff1684", "button"],
+];
+const SB_MODES = [["skip", "Skip automatically"], ["button", "Show a skip button"], ["bar", "Only mark on seek bar"], ["off", "Ignore"]];
+const HL_MODES = [["button", "Show a 'Jump to highlight' button"], ["bar", "Only mark on seek bar"], ["off", "Ignore"]];
+const sbCat = c => SB_CATS.find(x => x[0] === c) || [c, c, "#888", "bar"];
+const sbMode = c => pref("sb_" + c, sbCat(c)[3]);
+
+// Hashed lookups: only the first 4 hex chars of sha256(videoId) leave this computer, not the video id itself.
+const prefixReqs = {};
+async function hashed(base, id, query = "") {
+  if (!crypto.subtle) return [];
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id)));
+  const url = `${base}/${[...hash.slice(0, 2)].map(b => b.toString(16).padStart(2, "0")).join("")}${query}`;
+  return prefixReqs[url] ??= fetch(url).then(r => r.ok ? r.json() : []).catch(() => { delete prefixReqs[url]; return []; });
+}
+
+const daCache = {};  // video id -> {title, thumb} | null; cleared when DeArrow settings change
+const shownTitle = v => (daCache[v.id] instanceof Promise ? null : daCache[v.id]?.title) || v.title;
+// DeArrow's own rules: a submission counts if it's locked or not voted down; "original" means keep YouTube's
+function dearrow(v) {
+  const titles = pref("daTitles", true), thumbs = pref("daThumbs", "community");
+  if (!titles && thumbs === "off") return Promise.resolve(null);
+  // holds the pending promise first, then the result (null = no DeArrow data)
+  if (v.id in daCache) return Promise.resolve(daCache[v.id]);
+  return daCache[v.id] = hashed(SB + "/branding", v.id).then(all => {
+    const b = all[v.id];
+    if (!b) return null;
+    const ok = x => x.locked || x.votes >= 0;
+    const t = titles && b.titles.find(ok);
+    const th = b.thumbnails.find(ok), dur = b.videoDuration || v.duration;
+    const time = thumbs === "off" ? null : th ? (th.original ? null : th.timestamp)
+      : thumbs === "random" && dur && b.randomTime != null ? b.randomTime * dur : null;
+    return {
+      title: t && !t.original ? t.title.replace(/(^|\s)>(\S)/g, "$1$2").trim() : null,  // ">" marks words not to auto-format
+      thumb: time != null ? `https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=${v.id}&time=${time}` : null,
+    };
+  }).then(d => (daCache[v.id] = d));
+}
+// swap to the DeArrow frame once it has loaded; keep YouTube's thumbnail if the frame isn't available
+function swapImg(img, src) {
+  const probe = new Image();
+  probe.onload = () => { if (probe.naturalWidth > 1) img.src = src; };
+  probe.src = src;
+}
+
+const rydReqs = {};
+const dislikes = id => rydReqs[id] ??= fetch("https://returnyoutubedislikeapi.com/votes?videoId=" + id)
+  .then(r => r.ok ? r.json() : null).catch(() => null);
+
+async function loadSegments(v) {
+  const cats = SB_CATS.map(c => c[0]).filter(c => sbMode(c) !== "off");
+  if (!cats.length) return;
+  const q = `?categories=${encodeURIComponent(JSON.stringify(cats))}&actionTypes=${encodeURIComponent('["skip","mute","poi","full"]')}`;
+  const all = await hashed(SB + "/skipSegments", v.id, q);
+  if (P.v !== v) return;
+  P.segs = ((Array.isArray(all) ? all : []).find(x => x.videoID === v.id)?.segments || [])
+    .map(g => ({ cat: g.category, type: g.actionType, s: g.segment[0], e: g.segment[1], mode: sbMode(g.category) }));
+  const full = P.segs.find(g => g.type === "full");
+  $("#p-full").hidden = !full;
+  if (full) { $("#p-full").textContent = sbCat(full.cat)[1]; $("#p-full").style.background = sbCat(full.cat)[2]; }
+  renderSegs();
+}
+
+function renderSegs() {
+  const track = $("#p-track");
+  track.querySelectorAll(".p-seg").forEach(x => x.remove());  // SponsorBlock segments and chapter marks
+  if (!P.dur) return;
+  for (const g of P.segs || []) {
+    if (g.type === "full") continue;
+    const el = document.createElement("div");
+    el.className = "p-seg" + (g.type === "poi" ? " poi" : "");
+    el.style.cssText = `left:${g.s / P.dur * 100}%;width:${Math.max(0.3, (g.e - g.s) / P.dur * 100)}%;background:${sbCat(g.cat)[2]}`;
+    track.insertBefore(el, $("#p-knob"));
+  }
+  for (const c of P.chapters || []) {
+    if (c.start <= 0) continue;
+    const el = document.createElement("div");
+    el.className = "p-seg p-chap";
+    el.style.left = c.start / P.dur * 100 + "%";
+    track.insertBefore(el, $("#p-knob"));
+  }
+}
+
+function sbReset() {
+  if (P.sbMuted) { pv().muted = P.preMute; P.sbMuted = false; }
+  clearTimeout(P.noteT);
+  $("#p-sbskip").hidden = $("#p-note").hidden = $("#p-hl").hidden = $("#p-full").hidden = true;
+  P.segs = [];
+  renderSegs();
+}
+
+// runs on every timeupdate: auto-skip, skip buttons, muting, highlight button
+function sbTick() {
+  if (!P.segs?.length || P.drag) return;
+  const t = now();
+  let button = null, mute = false, hl = null;
+  for (const g of P.segs) {
+    if (g.mode === "off" || g.mode === "bar" && g.type !== "mute") continue;
+    if (g.type === "poi") { if (t < g.s - 1) hl = g; continue; }
+    if (g.type === "full" || t < g.s || t >= g.e - 0.3) continue;
+    if (g.type === "mute") { mute = g.mode !== "bar"; continue; }
+    if (g.done) continue;  // already skipped once, or the user chose to watch it
+    if (g.mode === "skip") { g.done = true; seek(g.e); return skipNote(g); }
+    button = g;
+  }
+  const b = $("#p-sbskip");
+  b.hidden = !button;
+  if (button) { b.textContent = `Skip ${sbCat(button.cat)[1].split(" /")[0].toLowerCase()} ⏭`; b.onclick = () => { button.done = true; seek(button.e); b.hidden = true; }; }
+  $("#p-hl").hidden = !hl;
+  if (hl) $("#p-hl").onclick = () => seek(hl.s);
+  if (mute && !P.sbMuted) { P.sbMuted = true; P.preMute = pv().muted; pv().muted = true; }
+  else if (!mute && P.sbMuted) { P.sbMuted = false; pv().muted = P.preMute; }
+}
+
+function skipNote(g) {
+  $("#p-note-t").textContent = `Skipped ${sbCat(g.cat)[1].split(" /")[0].toLowerCase()}`;
+  $("#p-note").hidden = false;
+  $("#p-note-undo").onclick = () => { $("#p-note").hidden = true; seek(g.s); };
+  clearTimeout(P.noteT);
+  P.noteT = setTimeout(() => $("#p-note").hidden = true, 5000);
+}
+
+// ---------- settings ----------
+const ACCENTS = ["#e8e8ff", "#6cc4ff", "#5ee08a", "#ffc94a", "#ff8a5c", "#ff5a7a", "#c49bff"];
+const secs = n => [n, n + " seconds"];
+// [section, [[key, label, description, type, default, options]]]; every key is read somewhere via pref()
+const SETTINGS = [
+  ["Playback", [
+    ["player", "Play videos in", "The built-in player, or mpv in its own window.", "select", "tubeview", [["tubeview", "TubeView player"], ["mpv", "mpv"]]],
+    ["quality", "Preferred quality", "Highest quality to use (also for downloads). Falls back to the closest one available.", "select", 1080,
+      [[2160, "4K"], ...[1440, 1080, 720, 480, 360, 240].map(h => [h, h + "p"]), [0, "Audio only"]]],
+    ["rate", "Default speed", "", "select", 1, [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(r => [r, r === 1 ? "Normal" : r + "×"])],
+    ["volume", "Default volume", "", "range", 1],
+    ["skip", "Skip amount", "Used by the skip buttons and the J / L keys.", "select", 10, [5, 10, 15, 30].map(secs)],
+    ["hideAfter", "Hide controls after", "How long the mouse can sit still before the controls fade.", "select", 3, [2, 3, 5, 10].map(secs)],
+    ["resume", "Resume where you left off", "Pick up partly watched videos from the same spot.", "toggle", true],
+  ]],
+  ["Audio language", [
+    ["audioLang", "Preferred audio language", "For videos YouTube has dubbed into other languages. The Audio button in the player switches tracks for one video.",
+      "select", "", [["", "Original language"], ...[["en", "English"], ["es", "Spanish"], ["pt", "Portuguese"], ["fr", "French"], ["de", "German"],
+      ["it", "Italian"], ["ru", "Russian"], ["ja", "Japanese"], ["ko", "Korean"], ["hi", "Hindi"], ["ar", "Arabic"], ["id", "Indonesian"],
+      ["tr", "Turkish"], ["pl", "Polish"], ["uk", "Ukrainian"], ["zh-Hans", "Chinese"]]]],
+  ]],
+  ["Music", [
+    ["radio", "Keep playing similar songs", "When your queue runs out, continue with a YouTube Music radio mix of the last song.", "toggle", true],
+    ["crossfade", "Crossfade", "Fade each song into the next.", "select", 0, [[0, "Off"], ...[2, 4, 6, 8, 12].map(secs)]],
+    ["level", "Even out volume", "Makes quiet and loud songs play at a similar volume.", "toggle", false],
+  ]],
+  ["Subtitles", [
+    ["ccAuto", "Turn on subtitles automatically", "Uses the video's own subtitles, or auto-generated ones if that's all there is. Your last pick is remembered either way.", "toggle", false],
+    ["ccSize", "Subtitle size", "", "select", 100, [[75, "Small"], [100, "Medium"], [130, "Large"], [170, "Extra large"]]],
+    ["ccBg", "Subtitle background", "", "select", 0.75, [[0, "None"], [0.5, "Light"], [0.75, "Dark"], [1, "Solid"]]],
+  ]],
+  ...(ANDROID ? [["Leaving the app", [
+    ["bgPlay", "Background play", "Keep a video's sound playing when you leave TubeView or the screen turns off, with controls in the notification.", "toggle", true],
+    ["pip", "Picture-in-picture", "On phones, a playing video carries on in a small window when you go to another app.", "toggle", true],
+  ]], ["Android Auto", [
+    ["carMode", "Android Auto shows TubeView as", "Music app: browse and play music on the car's screen, safe while driving. Full app: TubeView's own screen, with videos when you're parked (Android 15 and later). Reconnect your phone to the car after changing it.",
+      "select", "music", [["music", "Music app"], ["full", "Full app with videos"]]],
+  ]]] : []),
+  ["Autoplay", [
+    ["autoplay", "Autoplay next video", "When a video ends, play the next one from the row it came from.", "toggle", true],
+    ["countdown", "Countdown before autoplay", "", "select", 8, [5, 8, 10, 15].map(secs)],
+  ]],
+  ["Feeds", [
+    ["hideShorts", "Hide Shorts", "Hide videos that are 60 seconds or shorter.", "toggle", false],
+    ["continueRow", "Show Continue Watching", "The row of recently played videos on Home.", "toggle", true],
+    ["ytHistory", "Include YouTube watch history", "Add what you watched on YouTube elsewhere to Continue Watching (when signed in).", "toggle", true],
+    ["comments", "Show comments", "Load top comments in video details.", "toggle", true],
+    ["notify", "New-upload alerts", "A desktop notification when a channel you're subscribed to posts. Checked every 15 minutes while TubeView is open.", "toggle", true],
+  ]],
+  ["Appearance", [
+    ["accent", "Accent color", "", "swatch", ACCENTS[0], ACCENTS],
+    ["density", "Card size", "", "select", "normal", [["compact", "Compact"], ["normal", "Comfortable"], ["large", "Large"]]],
+    ["motion", "Animations", "Hover zoom and fades. Turn off to reduce motion.", "toggle", true],
+    ["tv", "TV mode", "Bigger layout you can drive with arrow keys or a game controller (Esc / B goes back).", "toggle", TV_DEFAULT],
+  ]],
+  ["SponsorBlock", [
+    ["sb", "SponsorBlock", "Skip sponsors and other parts of videos marked by the community (sponsor.ajay.app).", "toggle", true],
+    ...SB_CATS.map(([cat, label, color, d]) => ["sb_" + cat, label, "", "select", d, cat === "poi_highlight" ? HL_MODES : SB_MODES, color]),
+  ]],
+  ["DeArrow", [
+    ["daTitles", "Better titles", "Replace clickbait titles with ones written by the community.", "toggle", true],
+    ["daThumbs", "Better thumbnails", "Community-picked frames instead of clickbait thumbnails.", "select", "community",
+      [["off", "Off"], ["community", "Community picks only"], ["random", "Community picks, else a random frame"]]],
+  ]],
+  ["Return YouTube Dislike", [
+    ["ryd", "Show dislikes", "Estimated dislike counts in video details (returnyoutubedislike.com).", "toggle", true],
+  ]],
+];
+
+function applyLayout() {
+  const root = document.documentElement, gutter = innerWidth <= 700 ? 16 : 48;
+  const target = pref("tv", TV_DEFAULT) ? 440 : { compact: 240, normal: 320, large: 440 }[pref("density", "normal")] || 320;
+  // TV: four across whatever size the TV renders the page at (often 960px wide)
+  const cols = pref("tv", TV_DEFAULT) ? 4 : Math.max(1, Math.round((innerWidth - gutter * 2) / target));
+  root.style.setProperty("--cols", cols);
+  // rows that scroll sideways show part of the next card on narrow screens, so it's clear there's more
+  root.style.setProperty("--rcols", cols === 1 ? 1.4 : cols);
+  root.style.setProperty("--accent", pref("accent", ACCENTS[0]));
+  root.classList.toggle("no-motion", !pref("motion", true));
+  root.classList.toggle("tv", pref("tv", TV_DEFAULT));
+  root.classList.toggle("lite", !!ANDROID);
+  // ::cue can't read CSS variables reliably, so caption styling is a generated rule
+  const cue = $("#cue-style") || document.head.appendChild(Object.assign(document.createElement("style"), { id: "cue-style" }));
+  cue.textContent = `video::cue { font-size: ${pref("ccSize", 100)}%; background: rgba(0,0,0,${pref("ccBg", 0.75)}); color: #fff; font-family: inherit; }`;
+}
+addEventListener("resize", applyLayout);
+addEventListener("scroll", () => $("header").classList.toggle("solid", scrollY > 40), { passive: true });
+
+function setting([k, label, desc, type, d, opts, color]) {
+  const row = document.createElement("div"), val = pref(k, d);
+  row.className = "set-row";
+  row.innerHTML = `<label class="lab" for="set-${k}">${color ? `<i class="dot" style="background:${color}"></i>` : ""}<b>${esc(label)}</b>${desc ? `<small>${esc(desc)}</small>` : ""}</label>`;
+  let ctl;
+  if (type === "select") {
+    ctl = document.createElement("select");
+    ctl.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? "selected" : ""}>${esc(l)}</option>`).join("");
+    ctl.onchange = () => setPref(k, typeof d === "number" ? +ctl.value : ctl.value);
+  } else if (type === "toggle") {
+    ctl = Object.assign(document.createElement("input"), { type: "checkbox", className: "switch", checked: val });
+    ctl.setAttribute("role", "switch");
+    ctl.onchange = () => setPref(k, ctl.checked);
+  } else if (type === "range") {
+    ctl = Object.assign(document.createElement("input"), { type: "range", min: 0, max: 1, step: 0.01, value: val });
+    ctl.oninput = () => { setPref(k, +ctl.value); pv().volume = +ctl.value; };
+  } else if (type === "swatch") {
+    ctl = document.createElement("div");
+    ctl.className = "swatches";
+    ctl.setAttribute("role", "radiogroup");
+    ctl.append(...opts.map(c => {
+      const b = Object.assign(document.createElement("button"), { className: "swatch" + (c === val ? " on" : "") });
+      b.style.background = c;
+      b.setAttribute("aria-label", c);
+      b.onclick = () => { setPref(k, c); ctl.querySelectorAll(".swatch").forEach(x => x.classList.toggle("on", x === b)); applyLayout(); };
+      return b;
+    }));
+  }
+  ctl.id = "set-" + k;
+  ctl.addEventListener("change", applyLayout);
+  if (k.startsWith("da")) ctl.addEventListener("change", () => { for (const x in daCache) delete daCache[x]; });
+  if (k === "level") ctl.addEventListener("change", musicGraph);
+  row.append(ctl);
+  return row;
+}
+
+function eqPanel() {
+  const wrap = document.createElement("div");
+  const preset = Object.entries(EQ_PRESETS).find(([, g]) => g.join() === eqGains().join())?.[0] || "Custom";
+  wrap.innerHTML = `<div class="set-row"><label class="lab" for="eq-preset"><b>Preset</b><small>Shapes the music player's sound. Videos aren't affected.</small></label>
+    <select id="eq-preset">${[...Object.keys(EQ_PRESETS), "Custom"].map(n => `<option ${n === preset ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    <div class="eq">${EQ_FREQS.map((f, i) => `<label><input type="range" min="-12" max="12" step="1" value="${eqGains()[i]}" data-i="${i}"
+      aria-label="${f} Hz"><span>${f >= 1000 ? f / 1000 + "k" : f}</span></label>`).join("")}</div>`;
+  const sliders = [...wrap.querySelectorAll(".eq input")], sel = wrap.querySelector("select");
+  const apply = g => { setPref("eq", g); musicGraph(); };
+  sliders.forEach(r => r.oninput = () => { sel.value = "Custom"; apply(sliders.map(x => +x.value)); });
+  sel.onchange = () => { const g = EQ_PRESETS[sel.value]; if (g) { sliders.forEach((r, i) => r.value = g[i]); apply(g); } };
+  return wrap;
+}
+
+function actionRow(label, desc, btn, onclick, danger) {
+  const row = document.createElement("div");
+  row.className = "set-row";
+  row.innerHTML = `<div class="lab"><b>${esc(label)}</b>${desc ? `<small>${esc(desc)}</small>` : ""}</div>
+    <button class="btn ${danger ? "danger" : "ghost"}">${esc(btn)}</button>`;
+  row.querySelector("button").onclick = e => onclick(e.target, row);
+  return row;
+}
+
+function section(title, ...rows) {
+  const s = document.createElement("section");
+  s.className = "set-sec";
+  s.innerHTML = `<h2>${esc(title)}</h2><div class="set-card"></div>`;
+  s.lastChild.append(...rows);
+  return s;
+}
+
+function settingsPage() {
+  noHero();
+  const page = document.createElement("div");
+  page.className = "settings";
+  page.innerHTML = "<h1>Settings</h1>";
+  const confirmThen = (msg, fn) => (btn) => { if (confirm(msg)) { fn(); toast("Done"); } };
+
+  page.append(section("Account", actionRow(me.signed_in ? `Signed in through ${me.browser}` : "Not signed in",
+    me.signed_in ? "TubeView uses your YouTube login from your default browser." : `Sign in to see your recommendations and subscriptions.`,
+    me.signed_in ? "Manage" : "Sign in", () => openAccount())));
+  SETTINGS.forEach(([title, items]) => {
+    page.append(section(title, ...items.map(setting)));
+    if (title === "Music") page.append(section("Equalizer", eqPanel()));
+  });
+
+  page.append(section("Data",
+    actionRow("Watch history", "Clears the Continue Watching row.", "Clear", confirmThen("Clear your watch history?", () => store.set("history", [])), true),
+    actionRow("Resume positions", "Forget where you stopped in every video.", "Clear", confirmThen("Forget all resume positions?", () => dbSet("progress", null)), true),
+    actionRow("Cached feeds", "Fetch search results, feeds and video details fresh from YouTube.", "Refresh", async () => {
+      await fetch("/api/clear-cache", { method: "POST" }).catch(() => {});
+      for (const k in cache) delete cache[k];
+      toast("Cache cleared");
+    }),
+    actionRow("Reset settings", "Put every setting above back to its default.", "Reset", confirmThen("Reset all settings?", () => {
+      Object.keys(DB.data).filter(k => k.startsWith("pref:")).forEach(k => dbSet(k, null));
+      applyLayout(); go("settings");
+    }), true)));
+
+  const ytdlp = actionRow(`yt-dlp ${me.ytdlp || ""}`, "Does the YouTube work behind the scenes. Update it if videos or feeds stop loading.", "Update", async (btn, row) => {
+    btn.disabled = true; btn.textContent = "Updating…";
+    const r = await fetch("/api/update-ytdlp", { method: "POST" }).then(r => r.json()).catch(() => ({ error: "TubeView isn't responding." }));
+    btn.disabled = false; btn.textContent = "Update";
+    row.parentElement.querySelector(".set-out")?.remove();
+    const out = Object.assign(document.createElement("div"), { className: "set-out" });
+    out.textContent = r.error ? "Update failed:\n" + r.error
+      : r.version === r.running ? `Already up to date (${r.version}).` : `Updated to ${r.version}. Restart TubeView to use it.`;
+    row.after(out);
+  });
+  const rem = document.createElement("div");
+  const renderRemote = async (r) => {
+    r ??= await fetch("/api/remote").then(x => x.json()).catch(() => null);
+    if (!r) return;
+    me.remote = r.on;
+    rem.innerHTML = `<div class="set-row"><label class="lab" for="set-remote"><b>Allow phone remote</b>
+        <small>Control TubeView's music and videos here from your phone on the same Wi-Fi.</small></label>
+        <input type="checkbox" class="switch" role="switch" id="set-remote" ${r.on ? "checked" : ""}></div>
+      ${r.on ? `<div class="set-row"><div class="lab"><b>Pair a phone</b><small>In the TubeView Android app on your phone choose <b>Remote control</b>, or open
+        <b>http://${esc(r.ip)}:${r.port}</b> in your phone's browser, then enter this code.</small></div>
+        <span style="font-size:28px;font-weight:800;letter-spacing:4px">${esc(r.code || "")}</span></div>` : ""}
+      ${r.paired ? `<div class="set-row"><div class="lab"><b>${r.paired} paired phone${r.paired === 1 ? "" : "s"}</b>
+        <small>Forgetting them makes every phone pair again with a new code.</small></div><button class="btn danger" id="rem-forget">Forget all</button></div>` : ""}`;
+    rem.querySelector("#set-remote").onchange = async e => {
+      const res = await fetch("/api/remote?on=" + (e.target.checked ? 1 : 0), { method: "POST" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { toast(j?.error || "Couldn't change the remote"); e.target.checked = !e.target.checked; return; }
+      renderRemote(j);
+    };
+    rem.querySelector("#rem-forget")?.addEventListener("click", async () => {
+      if (confirm("Forget all paired phones?")) renderRemote(await fetch("/api/remote-forget", { method: "POST" }).then(x => x.json()));
+    });
+  };
+  renderRemote();
+  page.append(section("Phone remote", rem));
+  page.append(section("Downloads", actionRow("Download folder", "Videos are saved as MP4, audio as M4A, and play in TubeView offline.",
+    "Open folder", () => fetch("/api/open-downloads", { method: "POST" }))));
+  page.append(section("Maintenance", ytdlp, Object.assign(document.createElement("div"), { className: "set-out",
+    textContent: "TubeView also updates yt-dlp by itself once a day, in the background." })));
+
+  const keys = [["Play / pause", "Space / K"], ["Skip back / forward", "J / L"], ["Back / forward 5s", "← / →"], ["Volume", "↑ / ↓"],
+    ["Mute", "M"], ["Fullscreen", "F"], ["Subtitles on / off", "C"], ["Mini player", "I"], ["Picture in picture", "P"], ["Next video", "Shift + N"],
+    ["Close player", "Esc"], ["Search", "/"], ["Music: play / pause", "Space"], ["Sleep timer, playlists", "Right-click"], ["TV mode: move", "Arrows / D-pad"], ["TV mode: back", "Esc / B"]];
+  const k = document.createElement("div");
+  k.className = "keys";
+  k.innerHTML = keys.map(([a, b]) => `<div><span>${a}</span><kbd>${b}</kbd></div>`).join("");
+  page.append(section("Keyboard shortcuts", k));
+
+  const about = document.createElement("div");
+  about.className = "set-row";
+  about.innerHTML = `<div class="lab"><b>TubeView</b><small>Settings are saved in this browser. Your login choice is saved in ${esc(me.config || "~/.config/tubeview")}.
+    SponsorBlock and DeArrow data by Ajay Ramachandran and contributors (sponsor.ajay.app); dislike estimates by Return YouTube Dislike; lyrics from Apple Music (through Better Lyrics), LyricsPlus, KuGou, NetEase, LRCLIB and Genius;
+    lyric and stream lookups as Prism (github.com/Yigder/Prism) does them.</small></div>`;
+  page.append(section("About", about));
+  $("#main").append(page);
+}
+
+async function recsPage() {
+  const history = store.get("history");
+  if (pref("continueRow", true)) {
+    const cw = row("Continue Watching");
+    if (history.length) fill(cw, history);
+    // then add what you watched on YouTube elsewhere (local plays first, no duplicates)
+    if (pref("ytHistory", true)) api("/api/library?name=history").then(yt => {
+      if (!cw.isConnected) return;
+      const seen = new Set(history.map(v => v.id));
+      fill(cw, [...history, ...yt.filter(v => !seen.has(v.id))].slice(0, 40));
+    }).catch(() => history.length || cw.parentElement.remove());
+    else if (!history.length) cw.parentElement.remove();
+  }
+  const picks = row("Top Picks for You"), more = row("More to Explore", "grid");
+  let recs;
+  try { recs = await api("/api/recs"); } catch (e) { more.parentElement.remove(); return fail(picks, e); }
+  if (!picks.isConnected) return;  // user navigated away while loading
+  if (recs[0]) hero(recs[0], "Recommended for you", recs);
+  fill(picks, recs.slice(1, 17));
+  fill(more, recs.slice(17));
+}
+
+async function subsPage() {
+  noHero();
+  const latest = row("Latest");
+  const [subs, chans] = await Promise.allSettled([api("/api/subs"), api("/api/channels")]);
+  if (!latest.isConnected) return;  // user navigated away while loading
+  if (subs.status === "rejected") return fail(latest, subs.reason);
+  const channels = chans.status === "fulfilled" ? chans.value : [];
+  const avatar = Object.fromEntries(channels.map(c => [c.id, c.avatar?.startsWith("//") ? "https:" + c.avatar : c.avatar]));
+  const vids = subs.value, uploads = vids.filter(v => !v.live), live = vids.filter(v => v.live);
+  if (uploads[0]) hero(uploads[0], `New from ${uploads[0].channel}`, uploads);
+  latest.parentElement.remove();
+  // sections are appended in order: live, latest, most active channels, all channels
+  if (live.length) fill(row("Live & Upcoming"), live.sort((a, b) => (b.live === "is_live") - (a.live === "is_live")));
+  fill(row("Latest Uploads"), uploads.slice(1, 25));
+
+  const byChannel = {};
+  uploads.forEach(v => v.channel_id && (byChannel[v.channel_id] ??= []).push(v));
+  Object.values(byChannel).filter(vs => vs.length >= 2).sort((a, b) => b.length - a.length).slice(0, 6).forEach(vs => {
+    const el = row(vs[0].channel), h = el.previousElementSibling, id = vs[0].channel_id;
+    h.className = "head";
+    h.innerHTML = `${avatar[id] ? `<img class="ava" src="${esc(avatar[id])}" alt="">` : ""}<span>${esc(vs[0].channel)}</span>
+      <button class="more">View channel →</button>`;
+    h.querySelector(".more").onclick = () => go("channel", id);
+    fill(el, vs);
+  });
+
+  if (channels.length) {
+    const el = row(""), h = el.previousElementSibling;
+    el.className = "chan-grid";
+    h.className = "head";
+    h.innerHTML = `<span>Your Channels <span class="count">${channels.length}</span></span>
+      <input type="search" placeholder="Filter channels" aria-label="Filter channels">`;
+    const cards = channels.map(c => [c.name.toLowerCase(), chanCard(c)]);
+    el.replaceChildren(...cards.map(c => c[1]));
+    h.querySelector("input").oninput = e => cards.forEach(([n, b]) => b.hidden = !n.includes(e.target.value.toLowerCase()));
+  }
+}
+
+const CHANNEL_TABS = [["videos", "Videos"], ["shorts", "Shorts"], ["streams", "Live"], ["playlists", "Playlists"]];
+
+async function channelPage(id, tab = "videos") {
+  noHero();
+  const top = document.createElement("div");
+  $("#main").append(top);
+  const el = row("", "grid");
+  el.previousElementSibling.remove();
+  const tabs = Object.assign(document.createElement("div"), { className: "tabs" });
+  tabs.innerHTML = CHANNEL_TABS.map(([t, label]) => `<button class="${t === tab ? "on" : ""}" data-t="${t}">${label}</button>`).join("");
+  tabs.onclick = e => e.target.dataset.t && go("channel", id, e.target.dataset.t);
+  // header art comes from the Videos tab (cached), so switching tabs doesn't wait for it again
+  api(`/api/channel?id=${id}&tab=videos`).then(c => {
+    if (!top.isConnected) return;
+    top.innerHTML = `${c.banner ? `<div class="ch-banner" style="background-image:url('${esc(c.banner)}')"></div>` : ""}
+      <div class="ch-info">${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : `<div class="ph">${esc(c.name[0] || "?")}</div>`}
+        <div><h1>${esc(c.name)}${c.verified ? '<span class="ok" title="Verified">✓</span>' : ""}</h1>
+        <div class="meta">${c.handle ? `<span>${esc(c.handle)}</span>` : ""}${c.subscribers ? `<span>${fmtNum(c.subscribers)} subscribers</span>` : ""}</div>
+        ${c.description ? `<p>${esc(c.description)}</p>` : ""}</div></div>`;
+    top.append(tabs);
+  }).catch(() => top.append(tabs));
+  try {
+    const c = await api(`/api/channel?id=${id}&tab=${tab}`);
+    if (!el.isConnected) return;
+    if (tab === "playlists") fillWith(el, c.playlists, plCard, "No playlists.");
+    else fill(el, c.videos);
+  } catch (e) { fail(el, e); }
+}
+
+function renderAccount() {
+  const name = me.ytv ? me.ytv.name || "YouTube TV" : me.signed_in ? `Signed in · ${me.browser}` : "Sign in";
+  $("#acct").innerHTML = (me.ytv?.avatar ? `<img class="acct-pic" src="${esc(me.ytv.avatar)}" alt="">`
+    : icon('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', "acct-ico")) + `<span>${esc(name)}</span>`;
+  $("#acct").classList.toggle("on", account());
+}
+
+const refreshMe = async () => Object.assign(me, await fetch("/api/me").then(r => r.json()));
+function signedInNow(msg) {
+  for (const k in cache) delete cache[k];
+  closeDetail(); renderAccount(); toast(msg);
+  go(me.signed_in ? "subscriptions" : "home");
+}
+
+function openAccount() {
+  const sheet = $("#sheet");
+  $("#detail").dataset.id = "";
+  const show = html => {
+    sheet.innerHTML = `<button class="close" aria-label="Close" onclick="closeDetail()">✕</button><div class="form">${html}</div>`;
+    $("#detail").classList.add("open");
+    sheet.querySelector(".btn")?.focus();
+  };
+  const br = esc(me.browser || "your browser");
+  const ytvAbout = `Signs in the way YouTube's own TV app does (as SmartTube and NewTube do): the recommendations YouTube picks
+    for you on Home, plus your subscriptions, likes, playlists, history and Watch Later. It's not an official way for apps to
+    sign in, so YouTube may stop it working at any time.`;
+  const ytvOut = () => $("#ytvo")?.addEventListener("click", async () => {
+    await fetch("/api/ytv/signout", { method: "POST" });
+    await refreshMe(); signedInNow("Signed out of YouTube TV");
+  });
+  if (me.signed_in || me.ytv) {
+    show(`<h1>Your account</h1>
+      ${me.ytv ? `<div class="acct-who">${me.ytv.avatar ? `<img src="${esc(me.ytv.avatar)}" alt="">` : ""}<b>${esc(me.ytv.name || "YouTube TV")}</b></div>
+        <p class="meta">Signed in with YouTube TV: your YouTube recommendations on Home, plus your subscriptions,
+        likes, playlists, history and Watch Later, and you can like, subscribe and save from TubeView.</p>
+        <div class="actions">${me.ytv.channel_id ? '<button class="btn primary" id="ytvc">Your channel</button>' : ""}
+          <button class="btn ghost" id="ytvo">Sign out</button></div>`
+        : `<p class="meta">${ytvAbout}</p><div class="actions"><button class="btn primary" id="ytvi">Sign in with YouTube TV</button></div>`}
+      ${me.signed_in ? `<p class="meta">Also using your YouTube login from <b>${br}</b> (recommendations and history). Signing out only disconnects TubeView.</p>
+        <div class="actions"><button class="btn ghost" id="so">Disconnect ${br}</button></div>` : ""}
+      <div class="err" id="err"></div>`);
+    ytvOut();
+    $("#ytvc")?.addEventListener("click", () => { closeDetail(); go("channel", me.ytv.channel_id); });
+    $("#ytvi")?.addEventListener("click", ytvSignIn);
+    $("#so")?.addEventListener("click", async () => { await fetch("/api/signout", { method: "POST" }); await refreshMe(); signedInNow("Disconnected"); });
+    return;
+  }
+  show(`<h1>Sign in</h1>
+    <p class="meta">${ytvAbout}</p>
+    <p class="meta">You'll get a code to enter on your phone or computer.</p>
+    <div class="actions"><button class="btn primary" id="ytvi">Sign in with YouTube TV</button></div>
+    ${ANDROID ? "" : `<details class="alt"><summary>Or use your browser's YouTube login</summary>
+      <p class="meta">TubeView can also use the YouTube account you're signed in to in <b>${br}</b>. Make sure you're signed in
+      to YouTube there, then connect.</p>
+      <div class="actions"><button class="btn ghost" id="si">Connect ${br}</button></div></details>`}
+    <div class="err" id="err"></div>`);
+  $("#ytvi").onclick = ytvSignIn;
+  $("#si")?.addEventListener("click", async () => {
+    $("#si").textContent = "Connecting…"; $("#si").disabled = true; $("#err").textContent = "";
+    const r = await fetch("/api/signin", { method: "POST" }).catch(() => null);
+    if (r?.ok) { await refreshMe(); return signedInNow("Signed in"); }
+    $("#err").textContent = (await r?.json().catch(() => null))?.error || "Sign-in failed.";
+    $("#si").textContent = `Connect ${br}`; $("#si").disabled = false;
+  });
+}
+
+async function ytvSignIn() {
+  const form = $("#sheet .form");
+  const r = await fetch("/api/ytv/start", { method: "POST" }).catch(() => null);
+  const j = await r?.json().catch(() => null);
+  if (!r?.ok) { const e = $("#err"); if (e) e.textContent = j?.error || "Couldn't start sign-in."; return; }
+  form.innerHTML = `<h1>Sign in to YouTube TV</h1><p class="meta">On your phone or computer, go to</p>
+    <p class="code-url">${esc(j.url)}</p><p class="meta">and enter this code:</p><p class="code">${esc(j.code)}</p>
+    <p class="meta" id="dstat">Waiting for you to finish…</p>`;
+  for (let i = 0; i < 600 && $("#detail").classList.contains("open"); i++) {
+    await new Promise(res => setTimeout(res, 2000));
+    const m = await fetch("/api/me").then(x => x.json()).catch(() => null);
+    if (m?.ytv) {
+      Object.assign(me, m);
+      for (const k in cache) delete cache[k];
+      closeDetail(); renderAccount(); toast(`Signed in as ${me.ytv?.name || "YouTube TV"}`);
+      return go("home");
+    }
+    if (m?.ytv_login && !["waiting", "done"].includes(m.ytv_login)) {
+      return $("#dstat").textContent = m.ytv_login === "expired" ? "The code expired. Close this and try again." : `Sign-in didn't finish: ${m.ytv_login}`;
+    }
+  }
+}
+// Like / Subscribe in video details (YouTube TV sign-in). Their current state comes from lists already loaded (cached).
+async function ytActions(v, d) {
+  const box = $("#gacts");
+  if (!me.ytv || !box) return;
+  const [liked, chans] = await Promise.all([api("/api/library?name=liked").catch(() => []), api("/api/channels").catch(() => [])]);
+  if ($("#detail").dataset.id !== v.id || !box.isConnected) return;
+  let isLiked = liked.some(x => x.id === v.id), isSub = !!d.channel_id && chans.some(c => c.id === d.channel_id);
+  const call = async (path, ok) => {
+    const r = await fetch(path, { method: "POST" }).catch(() => null);
+    if (!r?.ok) return toast((await r?.json().catch(() => null))?.error || "That didn't work");
+    ok(); paint();
+  };
+  const like = button("", "ghost", () => call(`/api/yt/rate?id=${v.id}&like=${isLiked ? 0 : 1}`, () => {
+    isLiked = !isLiked; delete cache["/api/library?name=liked"]; }));
+  const sub = d.channel_id && button("", "ghost", () => call(`/api/yt/subscribe?id=${d.channel_id}&on=${isSub ? 0 : 1}`, () => {
+    isSub = !isSub; delete cache["/api/channels"]; delete cache["/api/subs"]; }));
+  const paint = () => { like.textContent = isLiked ? "👍 Liked" : "👍 Like"; if (sub) sub.textContent = isSub ? "✓ Subscribed" : "Subscribe"; };
+  paint();
+  box.replaceWith(...[like, sub].filter(Boolean));
+}
+
+// "Save to YouTube playlist" (YouTube TV sign-in), opened where the context menu was
+async function ytPlaylistMenu(v) {
+  const lists = await api("/api/playlists").catch(() => []);
+  showMenu(MENU.x, MENU.y, "Save to YouTube playlist", lists.length ? lists.map(pl => [pl.title, async () => {
+    const r = await fetch(`/api/yt/playlist-add?pl=${pl.id}&id=${v.id}`, { method: "POST" }).catch(() => null);
+    toast(r?.ok ? `Saved to “${pl.title}”` : (await r?.json().catch(() => null))?.error || "Couldn't save");
+  }]) : [["No YouTube playlists yet", () => {}]]);
+}
+
+function closeDetail() { $("#detail").classList.remove("open"); }
+// ---------- player ----------
+const ICON = {
+  play: "M8 5v14l11-7z", pause: "M6 5h4v14H6zm8 0h4v14h-4z",
+  rw: "M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z",
+  ff: "M12 5V1l5 5-5 5V7c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6h2c0 4.4-3.6 8-8 8s-8-3.6-8-8 3.6-8 8-8z",
+  vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z",
+  mute: "M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.4-2.4-1.4-1.4-2.4 2.4-2.4-2.4-1.4 1.4 2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4z",
+  fs: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
+  fsx: "M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z",
+  back: "M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z",
+  next: "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z",
+  mini: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
+  pip: "M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z",
+  shuffle: "M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z",
+  repeat: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z",
+  prev: "M6 6h2v12H6zm3.5 6 8.5 6V6z",
+  queue: "M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18A3 3 0 0 0 16 14a3 3 0 1 0 3 3V8h3V6h-5z",
+  lyrics: "M4 6h16v2H4zm0 5h10v2H4zm0 5h16v2H4z",
+  down: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
+  close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+};
+const svg = n => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
+const fmtT = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
+const pref = (k, d) => dbGet("pref:" + k) ?? d;
+const setPref = (k, v) => {
+  dbSet("pref:" + k, v);
+  if (k === "carMode") ANDROID?.setCarMode?.(v);  // switches TubeView's music service for Android Auto on or off
+};
+const progress = () => dbGet("progress") || {};
+function saveProgress(id, t, d) {
+  const all = progress();
+  if (t == null) delete all[id]; else all[id] = { t, d, at: Date.now() };
+  // keep the 200 most recent
+  const keep = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, 200);
+  dbSet("progress", Object.fromEntries(keep));
+  document.querySelectorAll(`.card[data-id="${id}"] .pbar i`).forEach(i => i.style.width = t == null ? "0" : Math.min(100, t / d * 100) + "%");
+}
+
+// The server streams from offset P.offset (seeking restarts the stream), so real time = offset + video.currentTime.
+const P = { queue: [], nextT: 0, v: null, offset: 0, dur: 0, live: false, heights: [], q: 1080, rate: 1, hideT: 0, savedAt: 0, drag: false };
+const pv = () => $("#pv");
+const now = () => P.offset + pv().currentTime;
+
+async function watch(v, list) {
+  if (ANDROID) return androidWatch(v, list);
+  closeDetail();
+  pauseMusic();  // one thing plays at a time
+  $("#mfull").hidden = true;
+  hideNext();
+  if (list?.length) P.queue = list;
+  if (!v.local) addHistory(v);
+  // v.local = "video" | "audio" for downloaded files: played straight from disk, with normal seeking
+  Object.assign(P, { v, offset: 0, dur: v.duration || 0, live: v.live === "is_live", heights: [], segs: [], local: v.local || null,
+    captions: [], cc: null, chapters: [], sb: null, audio: [], lang: "" });
+  expandPlayer();
+  pv().querySelectorAll("track").forEach(t => t.remove());
+  $("#p-art").style.backgroundImage = `url(${thumb(v.id, "maxresdefault")}), url(${thumb(v.id)})`;
+  $("#player").style.setProperty("--poster", `url(${thumb(v.id)})`);
+  sbReset();
+  if (pref("sb", true) && !P.live) loadSegments(v);
+  $("#player").hidden = false;
+  $("#player").classList.add("loading");
+  document.body.classList.add("watching");
+  $("#p-err").hidden = true;
+  $("#p-menu").hidden = true;
+  $("#p-title").textContent = shownTitle(v);
+  dearrow(v).then(() => P.v === v && ($("#p-title").textContent = shownTitle(v)));
+  $("#p-ch").textContent = v.channel;
+  showUI(); render();
+  let info;
+  try { info = await api("/api/playinfo?id=" + v.id + WEB); }
+  catch { if (!P.local) return P.v === v && playerError(); info = {}; }  // downloads still play offline
+  if (P.v !== v) return;  // closed or switched while loading
+  Object.assign(P, { dur: info.duration || P.dur, live: !!info.live, heights: P.local ? [] : info.heights || [],
+    captions: info.captions || [], chapters: info.chapters || [], sb: info.storyboard || null, audio: info.audio || [] });
+  // dubbed videos: the original track unless a preferred language is set and available
+  const pick = P.audio.find(a => a.lang === pref("audioLang", ""));
+  P.lang = pick && !pick.original ? pick.lang : "";
+  const want = pref("quality", 1080);
+  if (!vp9Ok() || P.live) P.heights = P.heights.filter(h => h <= 1080);  // above 1080p needs VP9 through MediaSource
+  P.q = P.local ? (P.local === "audio" ? 0 : 1080) : want === 0 && !P.live ? 0 : P.heights.find(h => h <= (want || 1080)) || P.heights.at(-1) || 1080;
+  const cc = pref("ccLang", ""), [ccLang, ccAuto] = cc.split(":");
+  P.cc = cc && (P.captions.find(c => c.lang === ccLang && c.auto === !!ccAuto) || P.captions.find(c => c.lang === ccLang))
+    || pref("ccAuto", false) && (P.captions.find(c => !c.auto) || P.captions[0]) || null;
+  P.rate = P.live ? 1 : pref("rate", 1);
+  const saved = pref("resume", true) && progress()[v.id];
+  load(!P.live && saved && saved.t > 10 && saved.t < P.dur - 30 ? saved.t : 0);
+}
+
+function load(t) {
+  renderSegs();
+  const video = pv();
+  $("#player").classList.toggle("audio", P.q === 0);
+  const src = directSrc();
+  if (src) {
+    P.offset = 0;
+    if (video.getAttribute("src") !== src) video.src = src;
+    video.currentTime = t;
+  } else if (useMse()) {
+    P.offset = 0;  // fragments carry their real timestamps, so currentTime is the real position
+    msLoad(t);
+  } else {
+    msReset();
+    P.offset = t;
+    video.src = `/api/stream?id=${P.v.id}&q=${P.q}&t=${t.toFixed(2)}&lang=${P.lang}${WEB}`;
+  }
+  loadTrack();
+  video.defaultPlaybackRate = video.playbackRate = P.rate;
+  video.play().catch(() => {});
+  $("#player").classList.add("loading");
+  render();
+}
+
+// Downloads and audio-only play from a seekable file instead of the restart-on-seek stream.
+const directSrc = () => !P.v ? null : P.local ? `/api/file?id=${P.v.id}&kind=${P.local}`
+  : P.q === 0 && !P.live ? `/api/audio?id=${P.v.id}&lang=${P.lang}${WEB}` : null;
+
+function seek(t) {
+  if (directSrc()) { pv().currentTime = Math.max(0, Math.min(t, (P.dur || pv().duration) - 0.5)); return render(); }
+  if (P.live || !P.v || !P.dur) return;
+  t = Math.max(0, Math.min(t, P.dur - 1));
+  // MediaSource: jump instantly inside what's loaded, otherwise restart the stream there.
+  // (A plain stream can't seek at all, not even inside what it has loaded.)
+  if (MS.ms) {
+    const b = pv().buffered;
+    for (let i = 0; i < b.length; i++) if (t >= b.start(i) && t < b.end(i) - 0.5) { pv().currentTime = t; return render(); }
+  }
+  load(t);
+}
+
+// ---------- MediaSource streaming ----------
+// The server's fragmented MP4 keeps the video's own timestamps (x=1), so each fragment lands at its real time:
+// seeks are exact and anything already loaded can be revisited instantly. Live streams use a plain <video src>.
+const MS = { ms: null, url: "", sb: null, codecs: "", ctrl: null, gen: 0 };
+const useMse = () => !!window.MediaSource && !P.live && !P.local && P.q !== 0;
+const vp9Ok = () => !!window.MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="vp09.00.51.08"');
+const sbIdle = sb => sb.updating ? new Promise(r => sb.addEventListener("updateend", r, { once: true })) : Promise.resolve();
+
+function msReset() {
+  MS.ctrl?.abort();
+  MS.gen++;
+  Object.assign(MS, { ms: null, url: "", sb: null, codecs: "" });
+}
+
+async function msOpen(video) {
+  if (MS.ms && MS.ms.readyState !== "closed" && video.src === MS.url) return MS.ms;
+  const ms = new MediaSource();
+  Object.assign(MS, { ms, sb: null, codecs: "", url: URL.createObjectURL(ms) });
+  video.src = MS.url;
+  await new Promise(r => ms.addEventListener("sourceopen", r, { once: true }));
+  if (P.dur) ms.duration = P.dur;
+  return ms;
+}
+
+async function msLoad(t) {
+  const video = pv(), gen = ++MS.gen;
+  MS.ctrl?.abort();
+  const ctrl = MS.ctrl = new AbortController();
+  try {
+    const ms = await msOpen(video);
+    const res = await fetch(`/api/stream?id=${P.v.id}&q=${P.q}&t=${t.toFixed(2)}&lang=${P.lang}&x=1${WEB}`, { signal: ctrl.signal });
+    if (gen !== MS.gen) return;
+    if (!res.ok) return playerError();
+    const codecs = res.headers.get("X-Codecs") || "avc1.640028, mp4a.40.2", type = `video/mp4; codecs="${codecs}"`;
+    if (!MediaSource.isTypeSupported(type)) { ctrl.abort(); toast("This quality isn't supported here"); return playerError(); }
+    // a different codec (e.g. H.264 -> VP9 for 4K) needs a fresh MediaSource: a finished one takes no new buffers
+    const target = MS.sb && MS.codecs !== codecs || !MS.sb && ms.readyState !== "open" ? (MS.ms = null, await msOpen(video)) : ms;
+    if (!MS.sb) { MS.sb = target.addSourceBuffer(type); MS.codecs = codecs; }
+    const sb = MS.sb;
+    await sbIdle(sb);
+    try { sb.abort(); } catch {}  // reset the parser: the new stream starts with its own init segment
+    if (sb.buffered.length) { sb.remove(0, Infinity); await sbIdle(sb); }
+    video.currentTime = t;
+    video.play().catch(() => {});  // a fresh MediaSource resets the element, which drops load()'s play()
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done || gen !== MS.gen) break;
+      await msAppend(sb, value, video);
+    }
+    if (gen === MS.gen && MS.ms.readyState === "open") { await sbIdle(sb); MS.ms.endOfStream(); }
+  } catch (e) {
+    if (e.name !== "AbortError" && gen === MS.gen) console.warn("stream:", e);
+  }
+}
+
+async function msAppend(sb, chunk, video) {
+  for (;;) {
+    await sbIdle(sb);
+    try { sb.appendBuffer(chunk); return; }
+    catch (e) {
+      if (e.name !== "QuotaExceededError") throw e;
+      // buffer full: drop what's well behind, otherwise wait for playback to use some up
+      const behind = video.currentTime - 30;
+      if (sb.buffered.length && sb.buffered.start(0) < behind) { sb.remove(0, behind); continue; }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+}
+
+function render() {
+  const video = pv(), t = now(), d = P.dur, pct = x => d ? Math.min(100, x / d * 100) + "%" : "0%";
+  if (!P.drag) { $("#p-prog").style.width = pct(t); $("#p-knob").style.left = pct(t); }
+  const b = video.buffered;
+  $("#p-buf").style.width = b.length ? pct(P.offset + b.end(b.length - 1)) : "0%";
+  const chap = chapterAt(t);
+  $("#p-time").textContent = P.live ? "LIVE" : `${fmtT(t)} / ${fmtT(d)}${chap ? " · " + chap.title : ""}`;
+  $("#p-time").classList.toggle("live", P.live);
+  $("#p-seek").style.visibility = P.live ? "hidden" : "";
+  // only touch icons when they change: render runs on every timeupdate
+  const icon = (el, n) => el.dataset.icon !== n && (el.dataset.icon = n, el.innerHTML = svg(n));
+  icon($("#p-play"), video.paused ? "play" : "pause");
+  icon($("#p-center"), video.paused ? "play" : "pause");
+  icon($("#p-mute"), video.muted || !video.volume ? "mute" : "vol");
+  icon($("#p-fs"), document.fullscreenElement ? "fsx" : "fs");
+  $("#p-vol").value = video.muted ? 0 : video.volume;
+  $("#p-q").textContent = P.q === 0 ? "Audio" : P.q >= 2160 ? "4K" : P.q + "p";
+  $("#p-q").hidden = P.heights.length < 2;
+  $("#p-cc").hidden = !P.captions.length;
+  $("#p-aud").hidden = P.audio.length < 2;
+  $("#p-cc").classList.toggle("on", !!P.cc);
+  $("#p-ch-btn").hidden = !P.chapters.length;
+  $("#p-pip").hidden = !IN_APP && (!document.pictureInPictureEnabled || P.q === 0);
+  $("#p-rate").textContent = P.rate + "×";
+  $("#p-rate").hidden = P.live;
+  $("#p-skip").hidden = !nextUp();
+}
+
+function showUI() {
+  $("#player").classList.add("ui");
+  clearTimeout(P.hideT);
+  P.hideT = setTimeout(() => {
+    if (!pv().paused && $("#p-menu").hidden && !P.drag) $("#player").classList.remove("ui");
+  }, pref("hideAfter", 3) * 1000);
+}
+
+const toggle = () => { const v = pv(); v.paused ? v.play().catch(() => {}) : v.pause(); };
+const setVol = x => { const v = pv(); v.volume = Math.max(0, Math.min(1, x)); v.muted = false; setPref("volume", v.volume); render(); };
+const fullscreen = () => document.fullscreenElement ? document.exitFullscreen() : $("#player").requestFullscreen().catch(() => {});
+
+function playerError() {
+  $("#player").classList.remove("loading");
+  $("#p-err").hidden = false;
+}
+
+// next item after the current video in the list it was opened from (skipping streams that haven't started)
+function nextUp() {
+  const i = P.queue.findIndex(x => x.id === P.v?.id);
+  return P.queue.slice(i + 1).find(x => x.live !== "is_upcoming" && x.id !== P.v?.id) || null;
+}
+
+function showNext() {
+  const n = nextUp();
+  if (!n) return;
+  hideNext();
+  let left = pref("countdown", 8);
+  $("#p-next-n").textContent = left;
+  $("#p-next-img").src = thumb(n.id);
+  $("#p-next-title").textContent = n.title;
+  $("#p-next-ch").textContent = n.channel;
+  const bar = $("#p-next-bar");
+  bar.style.transition = "none";
+  bar.style.width = "0";
+  $("#p-next").hidden = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transition = `width ${left}s linear`; bar.style.width = "100%"; }));
+  P.nextT = setInterval(() => { $("#p-next-n").textContent = --left; if (left <= 0) playNext(); }, 1000);
+}
+
+function hideNext() { clearInterval(P.nextT); P.nextT = 0; $("#p-next").hidden = true; }
+function playNext() { const n = nextUp(); hideNext(); if (n) watch(n); }
+
+const chapterAt = t => [...(P.chapters || [])].reverse().find(c => c.start <= t) || null;
+
+// Captions come through the server so their times can be shifted to match the stream's start (P.offset).
+function loadTrack() {
+  const video = pv();
+  video.querySelectorAll("track").forEach(t => t.remove());
+  if (!P.cc || !P.v) return;
+  const t = Object.assign(document.createElement("track"), { kind: "subtitles", srclang: P.cc.lang, label: P.cc.name, default: true });
+  t.src = `/api/captions?id=${P.v.id}&lang=${encodeURIComponent(P.cc.lang)}&auto=${P.cc.auto ? 1 : 0}&offset=${P.offset.toFixed(2)}`;
+  video.append(t);
+  t.track.mode = "showing";
+}
+
+function setCC(c) {
+  P.cc = c;
+  setPref("ccLang", c ? c.lang + (c.auto ? ":auto" : "") : "");
+  loadTrack();
+  render();
+}
+
+// Qt WebEngine (TubeView's own window) has the PiP API but no PiP window, so there the whole app window
+// becomes a small always-on-top player instead; window.py watches the page title for this.
+const IN_APP = navigator.userAgent.includes("QtWebEngine");
+const PIP_TITLE = "TubeView · Picture in picture";
+
+function togglePip() {
+  if (IN_APP) return setAppPip(!$("#player").classList.contains("pip"));
+  if (document.pictureInPictureElement) return document.exitPictureInPicture();
+  pv().requestPictureInPicture?.().catch(() => toast("Picture-in-picture isn't available here"));
+}
+
+function setAppPip(on) {
+  if (on && document.fullscreenElement) document.exitFullscreen();
+  $("#player").classList.remove("mini");
+  $("#player").classList.toggle("pip", on);
+  document.title = on ? PIP_TITLE : "TubeView";
+  if (!on && P.v) expandPlayer();
+}
+
+function minimizePlayer() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  $("#player").classList.add("mini");
+  $("#player").classList.remove("ui");
+  document.body.classList.remove("watching");
+}
+
+function expandPlayer() {
+  $("#player").classList.remove("mini");
+  document.body.classList.add("watching");
+  showUI();
+}
+
+function closePlayer() {
+  hideNext();
+  sbReset();
+  if ($("#player").classList.contains("pip")) setAppPip(false);
+  $("#player").classList.remove("mini", "audio");
+  const v = pv();
+  if (P.v && !P.live && now() > 10) saveProgress(P.v.id, now(), P.dur);
+  P.v = null;
+  v.pause();
+  msReset();
+  v.removeAttribute("src");
+  v.load();
+  if (document.fullscreenElement) document.exitFullscreen();
+  $("#player").hidden = true;
+  document.body.classList.remove("watching");
+}
+
+function menu(kind, title, items, cur, pick) {
+  const m = $("#p-menu");
+  if (!m.hidden && m.dataset.kind === kind) { m.hidden = true; return; }
+  m.dataset.kind = kind;
+  m.innerHTML = `<h3>${title}</h3>`;
+  items.forEach(([label, val]) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = val === cur ? "on" : "";
+    b.onclick = () => { m.hidden = true; pick(val); render(); };
+    m.append(b);
+  });
+  m.hidden = false;
+}
+
+(function initPlayer() {
+  const video = pv(), seekEl = $("#p-seek");
+  video.volume = pref("volume", 1);
+  $("#p-back").innerHTML = svg("back");
+  $("#p-rw").innerHTML = svg("rw");
+  $("#p-ff").innerHTML = svg("ff");
+  $("#p-skip").innerHTML = svg("next");
+  $("#p-mini").innerHTML = svg("mini");
+  $("#p-pip").innerHTML = svg("pip");
+  $("#p-expand").innerHTML = svg("fs");
+  $("#p-mini-close").innerHTML = svg("close");
+  for (const ev of ["play", "pause"]) video.addEventListener(ev, () => $("#p-mini-play").innerHTML = svg(video.paused ? "play" : "pause"));
+  video.addEventListener("loadedmetadata", () => { if (P.local && !P.dur && isFinite(video.duration)) { P.dur = video.duration; renderSegs(); } });
+  for (const ev of ["play", "pause", "progress", "volumechange", "ratechange"]) video.addEventListener(ev, render);
+  video.addEventListener("pause", showUI);
+  video.addEventListener("waiting", () => $("#player").classList.add("loading"));
+  video.addEventListener("playing", () => $("#player").classList.remove("loading"));
+  video.addEventListener("timeupdate", () => {
+    sbTick();
+    render();
+    if (P.v && !P.live && Date.now() - P.savedAt > 5000) { P.savedAt = Date.now(); if (now() > 10) saveProgress(P.v.id, now(), P.dur); }
+  });
+  video.addEventListener("ended", () => {
+    if (P.loop && P.v) return directSrc() ? (video.currentTime = 0, video.play()) : load(0);
+    if (sleepAtEnd()) return;
+    if (P.v) saveProgress(P.v.id, null);
+    showUI();
+    if (pref("autoplay", true)) showNext();
+  });
+  video.addEventListener("play", hideNext);  // replaying after the end cancels autoplay
+  video.addEventListener("error", () => { if (P.v && video.getAttribute("src")) playerError(); });
+  document.addEventListener("fullscreenchange", render);
+
+  $("#p-back").onclick = closePlayer;
+  $("#p-close").onclick = closePlayer;
+  $("#p-mpv").onclick = () => { const v = P.v; closePlayer(); playMpv(v); };
+  $("#p-play").onclick = $("#p-center").onclick = toggle;
+  $("#p-skip").onclick = $("#p-next-play").onclick = playNext;
+  $("#p-next-cancel").onclick = hideNext;
+  $("#p-rw").onclick = () => seek(now() - pref("skip", 10));
+  $("#p-ff").onclick = () => seek(now() + pref("skip", 10));
+  $("#p-mute").onclick = () => { video.muted = !video.muted; };
+  $("#p-vol").oninput = e => setVol(+e.target.value);
+  $("#p-fs").onclick = fullscreen;
+  $("#p-rate").onclick = () => menu("rate", "Speed", [0.5, 0.75, 1, 1.25, 1.5, 2].map(r => [r + "×", r]), P.rate,
+    r => { P.rate = video.defaultPlaybackRate = video.playbackRate = r; });
+  $("#p-q").onclick = () => menu("q", "Quality", [...P.heights.filter(h => h <= 1080 || vp9Ok()).map(h => [h >= 2160 ? "4K" : h + "p", h]),
+    ...(P.live ? [] : [["Audio only", 0]])], P.q,
+    h => { if (h !== P.q) { P.q = h; setPref("quality", h); load(now()); } });
+  // "" = the original track; picking a dub applies to this video only (Settings has a default)
+  $("#p-aud").onclick = () => menu("aud", "Audio track", P.audio.map(a => [a.name, a.original ? "" : a.lang]), P.lang,
+    lang => { if (lang !== P.lang) { P.lang = lang; load(now()); } });
+  $("#p-cc").onclick = () => menu("cc", "Subtitles", [["Off", null], ...P.captions.map(c => [c.name, c])], P.cc, setCC);
+  $("#p-ch-btn").onclick = () => menu("chap", "Chapters", P.chapters.map(c => [`${fmtT(c.start)}   ${c.title}`, c]), chapterAt(now()), c => seek(c.start));
+  $("#p-mini").onclick = minimizePlayer;
+  $("#p-expand").onclick = () => $("#player").classList.contains("pip") ? setAppPip(false) : expandPlayer();
+  $("#p-mini-play").onclick = e => { e.stopPropagation(); toggle(); };
+  $("#p-mini-close").onclick = e => { e.stopPropagation(); closePlayer(); };
+  $("#p-minibar").onclick = e => { if (e.target === e.currentTarget) expandPlayer(); };
+  $("#p-pip").onclick = togglePip;
+
+  const ui = $("#p-ui");
+  ui.addEventListener("pointermove", showUI);
+  ui.addEventListener("click", e => {
+    if (!e.target.closest(".p-menu, #p-rate, #p-q, #p-cc, #p-aud, #p-ch-btn")) $("#p-menu").hidden = true;
+    if (e.target === ui) toggle();
+  });
+  ui.addEventListener("dblclick", e => { if (e.target === ui) fullscreen(); });
+
+  const at = e => { const r = $("#p-track").getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * P.dur; };
+  const preview = e => {
+    const t = at(e), pct = (P.dur ? t / P.dur * 100 : 0) + "%", tip = $("#p-tip"), sb = P.sb;
+    $("#p-tip-t").textContent = fmtT(t);
+    $("#p-tip-ch").textContent = chapterAt(t)?.title || "";
+    // storyboard: pages of rows x cols tiles, one tile per sb.interval seconds
+    const i = sb ? Math.floor(t / sb.interval) : -1, per = sb ? sb.rows * sb.cols : 1, page = sb?.pages[Math.floor(i / per)];
+    tip.classList.toggle("has-prev", !!page);
+    if (page) {
+      const k = i % per, sc = 176 / sb.w;
+      $("#p-prev").style.cssText = `width:${sb.w * sc}px;height:${sb.h * sc}px;background-image:url("${page}");` +
+        `background-size:${sb.w * sb.cols * sc}px ${sb.h * sb.rows * sc}px;background-position:-${(k % sb.cols) * sb.w * sc}px -${Math.floor(k / sb.cols) * sb.h * sc}px`;
+    }
+    const w = $("#p-track").getBoundingClientRect().width, x = P.dur ? t / P.dur * w : 0, half = page ? 92 : 40;
+    tip.style.left = Math.max(half, Math.min(w - half, x)) + "px";
+    if (P.drag) { $("#p-prog").style.width = pct; $("#p-knob").style.left = pct; }
+  };
+  seekEl.onpointermove = preview;
+  seekEl.onpointerdown = e => { seekEl.setPointerCapture(e.pointerId); P.drag = true; seekEl.classList.add("drag"); preview(e); };
+  seekEl.onpointerup = e => { if (!P.drag) return; P.drag = false; seekEl.classList.remove("drag"); seek(at(e)); showUI(); };
+})();
+
+function playerKey(e) {
+  const v = pv();
+  const act = {
+    " ": toggle, k: toggle, j: () => seek(now() - pref("skip", 10)), l: () => seek(now() + pref("skip", 10)),
+    ArrowLeft: () => seek(now() - 5), ArrowRight: () => seek(now() + 5),
+    ArrowUp: () => setVol(v.volume + .05), ArrowDown: () => setVol(v.volume - .05),
+    m: () => { v.muted = !v.muted; }, N: playNext, f: fullscreen, Escape: () => document.fullscreenElement || closePlayer(),
+    i: minimizePlayer, p: togglePip, Enter: toggle, Backspace: closePlayer,
+    c: () => P.captions.length && setCC(P.cc ? null : P.captions.find(c => !c.auto) || P.captions[0]),
+  }[e.key];
+  if (!act || e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.key === "Enter" && e.target.closest?.("button, select")) return;  // let Enter press the focused control
+  e.preventDefault();
+  act();
+  showUI();
+}
+
+addEventListener("keydown", e => {
+  if ($("#player").classList.contains("pip")) {
+    if (e.key === "Escape") setAppPip(false);
+    else if (e.key === " ") { e.preventDefault(); toggle(); }
+    return;
+  }
+  if (!$("#player").hidden && !$("#player").classList.contains("mini")) return playerKey(e);
+  const el = document.activeElement;
+  // a drop-down doesn't count: on a TV the arrows move past it, and OK opens it
+  let typing = ["INPUT", "TEXTAREA"].includes(el.tagName) && el.type !== "checkbox" && !el._tvLock;
+  // in a text box, up/down (and left/right past either end) move on to the next control instead of trapping focus
+  if (typing && el.tagName === "INPUT" && !e.defaultPrevented && (e.key === "ArrowUp" || e.key === "ArrowDown"
+      || e.key === "ArrowLeft" && el.selectionStart === 0 && el.selectionEnd === 0
+      || e.key === "ArrowRight" && el.selectionStart === el.value.length)) typing = false;
+  if ((pref("tv", TV_DEFAULT) || padUsed) && e.key.startsWith("Arrow") && !typing && !e.defaultPrevented) { e.preventDefault(); return spatialMove(e.key); }
+  if (song() && !typing && e.key === " " && !e.target.closest?.("button, select")) { e.preventDefault(); return toggleMusic(); }
+  if (e.key === "Escape" && !$("#mfull").hidden) return $("#mfull").hidden = true;
+  if (e.key === "Escape") {
+    if ($("#detail").classList.contains("open")) closeDetail();
+    else if (pref("tv", TV_DEFAULT) && !$("header").contains(document.activeElement)) { lastSpot = document.activeElement; openMenu(); }
+    else if ((pref("tv", TV_DEFAULT) || padUsed) && $("#main").dataset.page !== "home") go("home");
+  }
+  if (e.key === "/" && !typing) { e.preventDefault(); $(".search input").focus(); }
+});
+
+// ---------- Android app ----------
+function androidWatch(v, list) {
+  closeDetail();
+  pauseMusic();
+  const pr = pref("resume", true) && progress()[v.id];
+  const cats = mode => pref("sb", true) ? SB_CATS.map(c => c[0]).filter(c => c !== "poi_highlight" && sbMode(c) === mode) : [];
+  const slim = x => ({ id: x.id, title: shownTitle(x), channel: x.channel || x.artist || "", duration: x.duration || 0,
+    channel_id: x.channel_id || "", local: x.local || "" });
+  ANDROID.playVideo(JSON.stringify({
+    video: slim(v), list: (list?.length ? list : [v]).slice(0, 100).map(slim),
+    start: pr && pr.t > 10 && pr.t < (pr.d || 1e9) - 30 ? pr.t : 0,
+    quality: pref("quality", 1080) || 1080, skip: cats("skip"), ask: cats("button"),
+    autoplay: pref("autoplay", true), cc: pref("ccLang", ""), ccAuto: pref("ccAuto", false),
+    background: pref("bgPlay", true), pip: pref("pip", true),
+  }));
+}
+// the native player reports back when it closes: what was watched, and where it stopped
+window.androidVideoDone = json => {
+  const r = JSON.parse(json);
+  (r.played || []).forEach(v => !v.local && addHistory(v));
+  if (r.quality) setPref("quality", r.quality);  // picked in the player's quality menu
+  androidMusicKey = ""; androidMusic();  // the notification showed the video while it played in the background
+  if (r.last?.id) r.last.pos > 10 && r.last.pos < r.last.dur - 15 ? saveProgress(r.last.id, r.last.pos, r.last.dur) : saveProgress(r.last.id, null);
+};
+
+// mirror the music player to Android's media session (notification, lock screen, TV "Now playing")
+let androidMusicKey = "";
+function androidMusic() {
+  if (!ANDROID) return;
+  const s = song(), a = ma();
+  const st = s ? { id: s.id, title: s.title, artist: s.artist, album: s.album || "", playing: !a.paused, pos: a.currentTime,
+    dur: isFinite(a.duration) ? a.duration : s.duration || 0, art: art(s.id, true) } : null;
+  const key = JSON.stringify(st && { ...st, pos: Math.floor(st.pos / 10) });  // position only every 10s (Android extrapolates)
+  if (key === androidMusicKey) return;
+  androidMusicKey = key;
+  ANDROID.musicState(JSON.stringify(st));
+}
+window.androidMedia = action => ({ play: () => ma().play(), pause: () => ma().pause(), next: () => nextSong(false),
+  prev: prevSong, stop: stopMusic })[action]?.();
+window.androidSeek = t => { ma().currentTime = +t; };
+// Android back button: close the innermost thing; returns 1 if it handled it
+window.androidBack = () => {
+  if (!$("#ctx").hidden) return hideMenu(), 1;
+  if ($("#detail").classList.contains("open")) return closeDetail(), 1;
+  if (!$("#mfull").hidden) return ($("#mfull").hidden = true), 1;
+  // TV: Back first opens the side menu, then goes home from there
+  if (pref("tv", TV_DEFAULT) && !$("header").contains(document.activeElement)) return (lastSpot = document.activeElement), openMenu(), 1;
+  if ($("#main").dataset.page !== "home") return go("home"), 1;
+  return 0;
+};
+
+async function pcRemotePage() {
+  noHero();
+  pageHead("Remote control", "Play and control videos and music in TubeView on your TV or computer. On that device, turn on Settings → Phone remote.");
+  const box = Object.assign(document.createElement("div"), { className: "tracks" });
+  const manual = Object.assign(document.createElement("form"), { className: "msearch" });
+  manual.innerHTML = `<input name="ip" placeholder="Or type its address, e.g. 192.168.1.20" inputmode="decimal" aria-label="PC address">
+    <button class="btn primary">Connect</button>`;
+  manual.onsubmit = e => {
+    e.preventDefault();
+    const ip = manual.ip.value.trim();
+    if (/^[\w.-]+(:\d+)?$/.test(ip)) location.href = `http://${ip.includes(":") ? ip : ip + ":8766"}/`;
+  };
+  $("#main").append(box, manual);
+  const scan = () => {
+    box.innerHTML = '<p class="empty" style="padding:0">Looking for TubeView on your network…</p>';
+    // discover() blocks for a moment (UDP broadcast), so let the page paint first
+    setTimeout(() => {
+      const pcs = JSON.parse(ANDROID.discover() || "[]");
+      box.replaceChildren(...pcs.map(pc => {
+        const b = Object.assign(document.createElement("button"), { className: "track" });
+        b.innerHTML = `<span class="n">${icon('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>')}</span><span></span><div style="min-width:0"><div class="t">${esc(pc.name)}</div><div class="c">${esc(pc.ip)}</div></div>`;
+        b.onclick = () => { location.href = `http://${pc.ip}:${pc.port}/`; };
+        return b;
+      }));
+      if (!pcs.length) box.innerHTML = '<p class="empty" style="padding:0">Nothing found. Make sure Phone remote is on in TubeView on your TV or computer, and that it is on the same Wi-Fi as this phone.</p>';
+      box.append(button("Search again", "ghost", scan));
+    }, 50);
+  };
+  scan();
+}
+
+// ---------- phone remote: report what's playing, run the phone's commands (only while the remote is on) ----------
+async function remoteSync() {
+  if (!me.remote) return;
+  const s = song(), a = ma(), v = pv();
+  const state = {
+    music: s ? { song: s, playing: !a.paused, t: a.currentTime, d: isFinite(a.duration) ? a.duration : s.duration || 0,
+      volume: a.volume, shuffle: M.shuffle, repeat: M.repeat, queue: M.queue.slice(M.i + 1, M.i + 31) } : null,
+    video: P.v ? { id: P.v.id, title: shownTitle(P.v), channel: P.v.channel, playing: !v.paused, t: now(), d: P.dur, live: P.live }
+      : ANDROID?.videoState ? JSON.parse(ANDROID.videoState() || "null") : null,  // Android plays videos in its own player
+  };
+  const cmds = await fetch("/api/remote-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(state) })
+    .then(r => r.json()).catch(() => []);
+  cmds.forEach(runRemote);
+}
+setInterval(remoteSync, 1000);
+
+function runRemote(c) {
+  const a = ma(), musicOn = !!song();
+  // Android: the video is in the app's own player
+  if (c.action.startsWith("video_") && c.action !== "video_play" && ANDROID?.videoCommand) return ANDROID.videoCommand(c.action, +c.t || 0);
+  const vids = c.videos || [];
+  ({
+    toggle: () => musicOn ? toggleMusic() : P.v && toggle(),
+    next: () => musicOn ? nextSong(false) : playNext(),
+    prev: () => musicOn && prevSong(),
+    seek: () => musicOn && isFinite(+c.t) && (a.currentTime = +c.t),
+    volume: () => { const v = Math.max(0, Math.min(1, +c.v || 0)); musicEls().forEach(x => x.volume = v); setPref("musicVolume", v); },
+    shuffle: () => musicOn && toggleShuffle(),
+    repeat: () => musicOn && cycleRepeat(),
+    play: () => c.songs?.length && playSongs(c.songs, Math.max(0, Math.min(c.songs.length - 1, +c.i || 0))),
+    queue: () => c.song && queueSong(c.song, !!c.next),
+    jump: () => musicOn && M.queue[M.i + 1 + (+c.i || 0)] && startSong(M.i + 1 + (+c.i || 0)),  // index into the "up next" list it was sent
+    stop: () => stopMusic(),
+    video_play: () => vids.length && watch(vids[Math.max(0, Math.min(vids.length - 1, +c.i || 0))], vids),
+    video_toggle: () => P.v && toggle(),
+    video_seek: () => P.v && isFinite(+c.t) && seek(+c.t),
+    video_skip: () => P.v && isFinite(+c.t) && seek(now() + +c.t),
+    video_next: () => P.v && playNext(),
+    video_prev: () => P.v && seek(0),
+    video_close: () => P.v && closePlayer(),
+  })[c.action]?.();
+}
+
+// a "Watch" click on a new-upload notification asks TubeView to play that video (desktop only)
+if (!ANDROID) setInterval(async () => {
+  const v = await fetch("/api/open-request").then(r => r.json()).catch(() => null);
+  if (v?.id) watch(v, [v]);
+}, 3000);
+
+// "Hey Google, play … on TubeView" (Android): what was asked for, or for just "play music", your For You mix
+window.androidPlaySearch = async q => {
+  const forYou = q ? null : await api("/api/music-foryou").catch(() => null);
+  const list = q ? await api("/api/msearch?q=" + encodeURIComponent(q)).catch(() => [])
+    : forYou?.mix?.length ? forYou.mix : store.get("musicHistory");
+  if (!list.length) return toast(q ? `Couldn't find “${q}”` : "Play a few songs first, then ask again");
+  playSongs(list, 0);
+  openMusic("queue");
+  toast(`Playing ${list[0].title}`);
+};
+
+dbLoad().then(() => {
+  applyLayout();
+  initMusic();  // after everything it uses (pref, svg, ...) is defined
+  pv().volume = pref("volume", 1);
+  return api("/api/me").then(m => {
+    me = m; renderAccount();
+  }).catch(() => {});
+}).finally(() => {
+  go("home");
+  const asked = ANDROID?.takeVoiceSearch?.();  // a voice request that opened TubeView
+  if (asked != null) androidPlaySearch(asked);
+});
+</script>
+</body>
+</html>
