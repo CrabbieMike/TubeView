@@ -4,9 +4,12 @@ A YouTube and YouTube Music client with a dark, poster-style interface, for Andr
 Android Auto and Linux. It has its own video player and music player, word-by-word lyrics, your real YouTube
 recommendations, SponsorBlock, downloads, background play and picture-in-picture, and no ads.
 
-**[Download the latest release](../../releases/latest)**: `TubeView-android.apk` for phones, foldables, TVs and cars,
-`TubeView-x86_64.AppImage` for Linux. Test builds are listed as pre-releases on the
-[releases page](../../releases).
+**Download the latest release:**
+
+- **[TubeView-android.apk](../../releases/latest/download/TubeView-android.apk)** for phones, foldables, TVs and cars
+- **[TubeView-x86_64.AppImage](../../releases/latest/download/TubeView-x86_64.AppImage)** for Linux
+
+Release notes and any test builds are on the [releases page](../../releases).
 
 <p align="center">
   <img src="docs/screenshots/home.jpg" width="100%" alt="Home: a recommended video across the top, then Continue Watching">
@@ -161,7 +164,7 @@ picks. On Linux you can also use the YouTube login of your web browser instead.
 
 ## Linux
 
-Download `TubeView-x86_64.AppImage`, make it executable (`chmod +x`) and run it. To run from the source instead:
+Download [`TubeView-x86_64.AppImage`](../../releases/latest/download/TubeView-x86_64.AppImage), make it executable (`chmod +x`) and run it. To run from the source instead:
 
 ```sh
 ./run.sh --window   # TubeView's own window
@@ -225,7 +228,7 @@ closes things.
 - **Icons** for every platform come from `python tools/make_icons.py` (needs Pillow).
 - **Releases**: the [Build workflow](../../actions/workflows/build.yml) builds on demand. Running it with a version
   publishes a release, and ticking "pre-release" publishes a test build that doesn't replace the latest release.
-  Pushing a tag like `v1.2.0` also publishes a release.
+  Pushing a tag like `v1.0.1` also publishes a release.
 
 ## How it works
 
