@@ -100,6 +100,7 @@ main.no-hero { margin-top: 0; padding-top: 90px; }
 .row h2 .more { margin-left: auto; background: none; color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap; flex: none; }
 .row h2.head > span:first-child { min-width: 0; }
 .row h2 .more:hover { color: var(--text); }
+.row h2 .more + .more { margin-left: 0; }  /* several actions sit together at the right, not spread across the row */
 .row h2 .count { color: var(--muted); font-weight: 500; }
 .row h2 input { margin-left: auto; background: rgba(255,255,255,.08); border: 0; border-radius: 999px; color: var(--text);
   font: inherit; font-size: 14px; padding: 8px 16px; width: min(260px, 45vw); outline: none; }
@@ -229,7 +230,9 @@ body.has-mbar .player.mini { bottom: 96px; }
 }
 @media (max-width: 1150px) { #mb-time { display: none; } .mtools input[type=range] { width: 70px; } }
 @media (max-width: 700px) {
-  .mbar { grid-template-columns: minmax(0, 1fr) auto; } .mtools { display: none; }
+  .mbar { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 12px; } .mtools { display: none; }
+  /* room for the song title: shuffle and repeat stay in the full player */
+  #mb-shuffle, #mb-repeat { display: none; }
   .msearch, .tracks { padding: 0 16px; } .msearch { padding-bottom: 18px; }
   .track { grid-template-columns: 48px minmax(0, 1fr) 48px; } .track .n, .track .al { display: none; }
 }
@@ -448,6 +451,9 @@ body.watching { overflow: hidden; }
 @keyframes spin { to { rotate: 360deg; } }
 .p-err { position: absolute; inset: 0; display: grid; place-content: center; gap: 18px; text-align: center; background: rgba(0,0,0,.75); font-size: 18px; }
 .p-err[hidden] { display: none; }
+.p-err .btn[hidden] { display: none; }
+.p-err p { max-width: 460px; padding: 0 24px; }
+.player:has(.p-err:not([hidden])) .p-center { display: none; }
 .p-next { position: absolute; right: 32px; bottom: 110px; width: min(380px, calc(100% - 24px)); padding: 16px; border-radius: 18px;
   background: rgba(22,22,29,.92); backdrop-filter: blur(14px); box-shadow: 0 20px 50px rgba(0,0,0,.5); display: grid; gap: 12px; }
 .p-next[hidden] { display: none; }
@@ -500,7 +506,10 @@ body.watching { overflow: hidden; }
 
 @media (max-width: 700px) {
   .p-top, .p-bottom { padding-left: 12px; padding-right: 12px; } .p-vol, #p-rw, #p-ff { display: none; } .p-title { font-size: 17px; }
-  header { padding: 14px 16px; gap: 12px; }
+  /* too many controls for one line: the pills and window buttons get a second line, at the right */
+  .p-bar { flex-wrap: wrap; justify-content: flex-end; } .p-bar .grow { flex: 1 0 100%; } .p-time { margin-right: auto; }
+  header { padding: 14px 16px; gap: 8px; }
+  .search { padding: 0 12px; } .search input { padding: 10px 6px; }
   .hero { padding: 0 16px 56px; } .row h2, .empty { padding: 0 16px; } .rail { padding: 8px 16px 14px; }
   .grid { padding: 8px 16px 0; } .rail { scroll-padding: 0 16px; } .search { width: auto; flex: 1; }
 }
@@ -625,8 +634,9 @@ body.watching { overflow: hidden; }
     <div class="bar"><i id="p-next-bar"></i></div>
     <div class="actions"><button class="btn primary" id="p-next-play">▶ Play now</button><button class="btn ghost" id="p-next-cancel">Cancel</button></div>
   </div>
-  <div class="p-err" id="p-err" hidden><p>Couldn't play this video here.</p>
-    <div class="actions" style="justify-content:center"><button class="btn primary" id="p-mpv">Open in mpv</button>
+  <div class="p-err" id="p-err" hidden><p id="p-err-t">Couldn't play this video here.</p>
+    <div class="actions" style="justify-content:center"><button class="btn primary" id="p-err-in" hidden>Sign in</button>
+      <button class="btn primary" id="p-mpv">Open in mpv</button>
       <button class="btn ghost" id="p-close">Close</button></div></div>
 </div>
 
@@ -909,7 +919,11 @@ async function openDetail(v, list = []) {
     const [d, ryd] = await Promise.all([api("/api/video?id=" + v.id), pref("ryd", true) ? dislikes(v.id) : null]);
     if ($("#detail").dataset.id === v.id) { render({ ...d, likes: d.likes ?? ryd?.likes, dislikes: ryd?.dislikes }, false); ytActions(v, d); }
   }
-  catch { if ($("#detail").dataset.id === v.id) sheet.querySelector(".desc").textContent = "Couldn't load details."; }
+  catch (e) {
+    const bot = /not a bot/i.test(await e?.json?.().then(j => j.error, () => "") || "");
+    if ($("#detail").dataset.id === v.id) sheet.querySelector(".desc").textContent = bot
+      ? "Couldn't load details: YouTube wants to confirm you're not a bot. Signing in usually fixes this." : "Couldn't load details.";
+  }
 }
 function noHero() { $("#hero").style.display = "none"; $("#main").className = "no-hero"; }
 const fail = (el, e) => e.json?.().then(j => el.outerHTML = `<p class="empty">${esc(j.error || "Failed to load.")}</p>`)
@@ -1205,7 +1219,7 @@ async function downloadsPage() {
 
 // ---------- music ----------
 // The queue is M.queue with M.i the current song; "radio" appends YouTube Music's mix for the last song when it runs low.
-const M = { el: 0, fading: 0, queue: [], i: -1, shuffle: false, order: null, repeat: "off", radioFor: null, lyrics: null, lyIdx: -1, seeking: false };
+const M = { el: 0, fading: 0, queue: [], i: -1, shuffle: false, order: null, repeat: "off", radioFor: null, lyrics: null, lyIdx: -1, seeking: false, fails: 0 };
 // two audio elements so one song can fade into the next (crossfade); ma() is the one currently playing
 const ma = () => $(M.el ? "#ma2" : "#ma");
 const musicEls = () => [$("#ma"), $("#ma2")];
@@ -1330,11 +1344,13 @@ async function musicPage(q, tab) {
   if (recent.length) songRow("Recently Played", async () => recent.slice(0, 20));
   // the server owns the row list (it prefetches them)
   const rows = await api("/api/music-rows").catch(() => []);
+  if (!tabs.isConnected) return;  // user navigated away while loading
   for (const [title, query] of rows) songRow(title, () => api("/api/msearch?q=" + encodeURIComponent(query)), playAll(false));
 }
 
 function playSongs(list, i = 0) {
   M.queue = [...list];
+  M.fails = 0;
   M.order = null;
   M.radioFor = null;
   if (M.shuffle) { M.order = [...M.queue]; M.queue = [M.queue[i], ...shuffled(M.queue.filter((_, k) => k !== i))]; i = 0; }
@@ -1620,7 +1636,13 @@ function initMusic() {
     for (const ev of ["play", "pause", "volumechange"]) a.addEventListener(ev, mine(renderMusic));
     a.addEventListener("timeupdate", mine(() => { renderTime(); tickLyrics(); crossfadeCheck(a); }));
     a.addEventListener("ended", mine(() => sleepAtEnd() || nextSong(true)));
-    a.addEventListener("error", mine(() => { if (a.getAttribute("src")) { toast("Couldn't play that song, skipping"); setTimeout(() => nextSong(false), 800); } }));
+    a.addEventListener("playing", mine(() => { M.fails = 0; }));
+    // skip a song that won't play, but stop once several in a row fail (offline, or YouTube blocking every request)
+    a.addEventListener("error", mine(() => {
+      if (!a.getAttribute("src")) return;
+      if (++M.fails >= 3) { M.fails = 0; renderMusic(); return toast("Couldn't play these songs. Check your connection, or sign in if YouTube keeps refusing."); }
+      toast("Couldn't play that song, skipping"); setTimeout(() => nextSong(false), 800);
+    }));
   }
   if (navigator.mediaSession) {
     const ms = navigator.mediaSession;
@@ -2578,7 +2600,7 @@ async function watch(v, list) {
   showUI(); render();
   let info;
   try { info = await api("/api/playinfo?id=" + v.id + WEB); }
-  catch { if (!P.local) return P.v === v && playerError(); info = {}; }  // downloads still play offline
+  catch (e) { if (!P.local) return P.v === v && playerError(e); info = {}; }  // downloads still play offline
   if (P.v !== v) return;  // closed or switched while loading
   Object.assign(P, { dur: info.duration || P.dur, live: !!info.live, heights: P.local ? [] : info.heights || [],
     captions: info.captions || [], chapters: info.chapters || [], sb: info.storyboard || null, audio: info.audio || [] });
@@ -2747,8 +2769,15 @@ const toggle = () => { const v = pv(); v.paused ? v.play().catch(() => {}) : v.p
 const setVol = x => { const v = pv(); v.volume = Math.max(0, Math.min(1, x)); v.muted = false; setPref("volume", v.volume); render(); };
 const fullscreen = () => document.fullscreenElement ? document.exitFullscreen() : $("#player").requestFullscreen().catch(() => {});
 
-function playerError() {
+// `e`: the failed server response, whose error says why (YouTube's bot check is the one a user can fix)
+async function playerError(e) {
   $("#player").classList.remove("loading");
+  const why = await e?.json?.().then(j => j.error || "", () => "") || "";
+  const bot = /not a bot/i.test(why);
+  $("#p-err-t").textContent = bot ? (account() ? "YouTube wants to confirm you're not a bot. Try signing in again in Settings."
+    : "YouTube wants to confirm you're not a bot. Sign in to keep watching.") : "Couldn't play this video here.";
+  $("#p-err-in").hidden = !bot || account();
+  $("#p-mpv").hidden = !me.mpv;
   $("#p-err").hidden = false;
 }
 
@@ -2898,6 +2927,7 @@ function menu(kind, title, items, cur, pick) {
   $("#p-back").onclick = closePlayer;
   $("#p-close").onclick = closePlayer;
   $("#p-mpv").onclick = () => { const v = P.v; closePlayer(); playMpv(v); };
+  $("#p-err-in").onclick = () => { closePlayer(); openAccount(); };
   $("#p-play").onclick = $("#p-center").onclick = toggle;
   $("#p-skip").onclick = $("#p-next-play").onclick = playNext;
   $("#p-next-cancel").onclick = hideNext;
